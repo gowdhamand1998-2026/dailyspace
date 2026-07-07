@@ -304,12 +304,16 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-/* favicon loading chain: Google (big) → the site's apple-touch icon →
-   the site's favicon.ico → our globe. Every stage must return a
-   reasonably sharp image (≥32px), otherwise we move on. */
-window.faviconCheck = function (img) {
-  if (img.naturalWidth < 32) window.faviconNext(img);
-};
+/* favicon chain. faviconV2 returns a real 404 when a site has no icon
+   (unlike the old s2 endpoint, which sent back a fake globe), so any
+   image that loads is the site's genuine icon — at whatever size exists.
+   Chain: faviconV2 → site's apple-touch icon → site's favicon.ico → our globe. */
+function faviconUrl(host) {
+  return "https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL"
+    + `&url=https://${host}&size=128`;
+}
+
+window.faviconCheck = function () { /* any loaded image is genuine — keep it */ };
 
 window.faviconNext = function (img) {
   const stage = +img.dataset.stage;
@@ -542,7 +546,7 @@ function renderDesktop(openId, widgetKind) {
       ${state.links.map((l) => `
         <div class="linkicon" data-link="${l.id}" style="left:${l.pos.x}%; top:${l.pos.y}%">
           <div class="linkicon-tile">
-            <img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(new URL(l.url).hostname)}&sz=128"
+            <img src="${faviconUrl(new URL(l.url).hostname)}"
                  alt="" data-host="${escapeHtml(new URL(l.url).hostname)}" data-stage="0"
                  onload="faviconCheck(this)" onerror="faviconNext(this)" />
             <span class="linkicon-fallback" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5a14.5 14.5 0 0 1 3.8 9.5 14.5 14.5 0 0 1-3.8 9.5 14.5 14.5 0 0 1-3.8-9.5A14.5 14.5 0 0 1 12 2.5z"/></svg></span>
