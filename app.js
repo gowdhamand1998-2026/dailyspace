@@ -151,11 +151,136 @@ function ensureDefaults(s) {
 const hadSavedData = !!localStorage.getItem(Store.KEY);
 let state = ensureDefaults(Store.load());
 
+/* ---------- cloud sync (Supabase) ---------- */
+
+const SUPABASE_URL = "https://xktzviuelnrfqpazdtvl.supabase.co";
+const SUPABASE_KEY = "sb_publishable_2kD95uDSNPp0eF1ocE9gQQ_S9wVwdZA";
+const db = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+const cloud = { user: null, timer: null, status: "signedout" };
+
+if (db) {
+  db.auth.onAuthStateChange((_event, session) => {
+    const hadUser = !!cloud.user;
+    cloud.user = session ? session.user : null;
+    if (cloud.user && !hadUser) loadCloud();
+    if (!cloud.user) { cloud.status = "signedout"; updateSyncChip(); }
+  });
+}
+
+/* on login: cloud is the source of truth; first login pushes local data up */
+async function loadCloud() {
+  cloud.status = "loading";
+  updateSyncChip();
+  const { data: row, error } = await db.from("spaces").select("data").maybeSingle();
+  if (error) { cloud.status = "error"; updateSyncChip(); return; }
+  if (row && row.data) {
+    state = ensureDefaults(row.data);
+    Store.save(state);
+    cloud.status = "synced";
+    route();
+  } else {
+    await cloudSaveNow(); // nothing in the cloud yet → upload this device's data
+  }
+  updateSyncChip();
+}
+
+async function cloudSaveNow() {
+  if (!db || !cloud.user) return;
+  cloud.status = "saving";
+  updateSyncChip();
+  const { error } = await db.from("spaces").upsert({
+    user_id: cloud.user.id,
+    data: state,
+    updated_at: new Date().toISOString(),
+  });
+  cloud.status = error ? "error" : "synced";
+  updateSyncChip();
+}
+
+function scheduleCloudSave() {
+  if (!db || !cloud.user) return;
+  clearTimeout(cloud.timer);
+  cloud.status = "saving";
+  updateSyncChip();
+  cloud.timer = setTimeout(cloudSaveNow, 900);
+}
+
+const SYNC_LABELS = {
+  signedout: "Sign in", loading: "Loading…", saving: "Saving…",
+  synced: "Synced", error: "Offline",
+};
+
+function syncChipHtml() {
+  return `<span class="sync-dot"></span>${SYNC_LABELS[cloud.status] || ""}`;
+}
+
+function updateSyncChip() {
+  const el = document.getElementById("sync-chip");
+  if (el) {
+    el.dataset.state = cloud.status;
+    el.innerHTML = syncChipHtml();
+    el.title = cloud.user ? `Signed in as ${cloud.user.email} — click to sign out` : "Sign in to sync across devices";
+  }
+}
+
+function showSignInModal() {
+  if (app.querySelector(".window-backdrop")) return;
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "window-backdrop";
+  backdrop.innerHTML = `
+    <div class="new-form">
+      <h3>Sign in to sync</h3>
+      <p class="form-note">Your projects will follow you to any device. No password — we email you a magic link.</p>
+      <input type="email" id="si-email" placeholder="you@email.com" maxlength="120" />
+      <div class="row">
+        <button class="btn btn-ghost" id="si-cancel">Cancel</button>
+        <button class="btn btn-primary" id="si-send">Send magic link</button>
+      </div>
+    </div>
+  `;
+  app.appendChild(backdrop);
+
+  const emailInput = backdrop.querySelector("#si-email");
+  emailInput.focus();
+
+  function close() { backdrop.remove(); }
+
+  async function send() {
+    const email = emailInput.value.trim();
+    if (!email || !email.includes("@")) { emailInput.focus(); return; }
+    const btn = backdrop.querySelector("#si-send");
+    btn.textContent = "Sending…";
+    const { error } = await db.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin + window.location.pathname },
+    });
+    backdrop.querySelector(".new-form").innerHTML = error
+      ? `<h3>Something went wrong</h3><p class="form-note">${escapeHtml(error.message)}</p>
+         <div class="row"><button class="btn btn-ghost" id="si-cancel">Close</button></div>`
+      : `<h3>Check your email</h3><p class="form-note">We sent a sign-in link to <strong>${escapeHtml(email)}</strong>. Open it on this device and you're in.</p>
+         <div class="row"><button class="btn btn-primary" id="si-cancel">Done</button></div>`;
+    backdrop.querySelector("#si-cancel").addEventListener("click", close);
+  }
+
+  backdrop.querySelector("#si-send").addEventListener("click", send);
+  backdrop.querySelector("#si-cancel").addEventListener("click", close);
+  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") send();
+    if (e.key === "Escape") close();
+  });
+}
+
 let selectedId = null;
 let winMax = false;       // is the open window full screen?
 let minimizedId = null;   // project whose window is minimized to the dock
 
-function persist() { Store.save(state); }
+function persist() {
+  Store.save(state);      // instant local save
+  scheduleCloudSave();    // debounced cloud save when signed in
+}
 persist();
 
 /* first visit in this browser: if the site folder ships a data.json,
@@ -406,6 +531,7 @@ function renderDesktop(openId, widgetKind) {
       <div class="menubar">
         <span class="wordmark">Daily<em>Space</em></span>
         <div class="menubar-right">
+          <button class="sync-chip" id="sync-chip" data-sync data-state="${cloud.status}">${syncChipHtml()}</button>
           <span class="menu-date">${menuDate()}</span>
           <span class="menu-clock" id="menu-clock">${clockNow()}</span>
           <button class="tb-toggle ${state.timebarHidden ? "collapsed" : ""}" data-tb-toggle
@@ -477,6 +603,17 @@ function wireDesktop() {
     if (e.target === desktop || e.target === layer) {
       selectedId = null;
       app.querySelectorAll(".icon.selected").forEach((el) => el.classList.remove("selected"));
+    }
+  });
+
+  // cloud sync chip: sign in, or sign out when already in
+  const syncChip = app.querySelector("[data-sync]");
+  if (syncChip) syncChip.addEventListener("click", () => {
+    if (!db) return;
+    if (cloud.user) {
+      if (confirm(`Signed in as ${cloud.user.email}. Sign out?`)) db.auth.signOut();
+    } else {
+      showSignInModal();
     }
   });
 
