@@ -209,8 +209,8 @@ function scheduleCloudSave() {
 }
 
 const SYNC_LABELS = {
-  signedout: "Locked", loading: "Loading…", saving: "Saving…",
-  synced: "Synced", error: "Offline",
+  signedout: "locked", loading: "loading", saving: "saving",
+  synced: "synced", error: "offline",
 };
 
 function syncChipHtml() {
@@ -320,13 +320,10 @@ function initials(name) {
     .toUpperCase();
 }
 
-/* menu bar date: "TUE · JUL 07" */
+/* menu bar date: "Tue, Jul 7" */
 function menuDate() {
   const d = new Date();
-  const wd = d.toLocaleDateString("en-US", { weekday: "short" });
-  const mo = d.toLocaleDateString("en-US", { month: "short" });
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${wd} · ${mo} ${day}`.toUpperCase();
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
 /* digital clock: "21:04" with a pulsing colon */
@@ -407,7 +404,7 @@ function updateTimebar() {
   const miniLabel = document.getElementById("tb-mini-label");
   if (miniFill) {
     miniFill.style.width = pct + "%";
-    miniLabel.textContent = `${state.period.toUpperCase()} ${Math.round(pct)}%`;
+    miniLabel.textContent = `${state.period} ${Math.round(pct)}%`;
   }
 }
 
@@ -493,8 +490,10 @@ function renderDesktop(openId, widgetKind) {
           <span class="menu-clock" id="menu-clock">${clockNow()}</span>
           <button class="tb-toggle ${state.timebarHidden ? "collapsed" : ""}" data-tb-toggle
             title="${state.timebarHidden ? "Show" : "Hide"} time progress">
-            <span class="tb-mini"><span class="tb-mini-fill" id="tb-mini-fill" style="width:${timeProgress(state.period).pct}%"></span></span>
-            <span class="tb-mini-label" id="tb-mini-label">${state.period.toUpperCase()} ${Math.round(timeProgress(state.period).pct)}%</span>
+            <span class="tb-mini-wrap">
+              <span class="tb-mini-label" id="tb-mini-label">${state.period} ${Math.round(timeProgress(state.period).pct)}%</span>
+              <span class="tb-mini"><span class="tb-mini-fill" id="tb-mini-fill" style="width:${timeProgress(state.period).pct}%"></span></span>
+            </span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
         </div>

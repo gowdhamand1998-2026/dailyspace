@@ -85,48 +85,42 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 20px;
-  font-size: 13px;
-  font-weight: 500;
+  padding: 10px 22px;
+  font-size: 12.5px;
   color: var(--text-2);
-  background: rgba(18, 18, 22, 0.45);
+  background: rgba(14, 14, 17, 0.35);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
-  border-bottom: 1px solid var(--line);
   z-index: 5;
 }
 
 .menubar .wordmark {
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: -0.02em;
+  font-weight: 650;
+  font-size: 13.5px;
+  letter-spacing: 0.01em;
   color: var(--text);
+  text-transform: lowercase;
 }
 .menubar .wordmark em { font-style: normal; font-weight: 400; color: var(--text-3); }
 
-.menubar-right { display: flex; gap: 16px; align-items: center; }
+/* quiet typographic cluster — separated by spacing, not boxes */
+.menubar-right { display: flex; gap: 22px; align-items: center; }
 
-/* cloud sync status chip */
+/* sync: just a breathing dot and a whispered word */
 .sync-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 11px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.05);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  gap: 7px;
+  padding: 0;
+  font-size: 11.5px;
+  font-weight: 450;
   color: var(--text-3);
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  transition: color 0.15s;
 }
-.sync-chip:hover { color: var(--text); background: rgba(255, 255, 255, 0.1); border-color: var(--line-strong); }
+.sync-chip:hover { color: var(--text-2); }
 
-.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #9ca3af; flex-shrink: 0; }
-.sync-chip[data-state="synced"] .sync-dot { background: #4ade80; box-shadow: 0 0 8px rgba(74, 222, 128, 0.6); }
+.sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #9ca3af; flex-shrink: 0; }
+.sync-chip[data-state="synced"] .sync-dot { background: #4ade80; }
 .sync-chip[data-state="saving"] .sync-dot,
 .sync-chip[data-state="loading"] .sync-dot { background: #fbbf24; animation: dot-pulse 1s ease-in-out infinite; }
 .sync-chip[data-state="error"] .sync-dot { background: #f87171; }
@@ -179,19 +173,17 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .form-error { font-size: 12.5px; color: #f87171; min-height: 18px; margin: -2px 0; }
 
 .menu-date {
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
+  font-size: 12px;
+  font-weight: 450;
   color: var(--text-3);
 }
 
 .menu-clock {
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text);
-  text-shadow: 0 0 14px rgba(255, 255, 255, 0.25);
+  margin-left: -12px; /* clock sits close to its date */
 }
 
 .clock-colon { animation: colon-pulse 2s ease-in-out infinite; }
@@ -210,8 +202,8 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 8px 20px;
-  background: rgba(18, 18, 22, 0.45);
+  padding: 8px 22px;
+  background: rgba(14, 14, 17, 0.35);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border-bottom: 1px solid var(--line);
@@ -227,24 +219,34 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 }
 .desktop-items.with-timebar { top: 78px; }
 
-/* menu bar toggle: a mini preview of the strip, so it's obvious what it opens */
+/* menu bar toggle: the period label with a hairline of progress beneath it */
 .tb-toggle {
   display: flex;
   align-items: center;
-  gap: 7px;
-  height: 26px;
-  padding: 0 9px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.05);
+  gap: 6px;
+  padding: 0;
   color: var(--text-3);
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  transition: color 0.15s;
 }
-.tb-toggle:hover { color: var(--text); background: rgba(255, 255, 255, 0.1); border-color: var(--line-strong); }
+.tb-toggle:hover { color: var(--text); }
+
+.tb-mini-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.tb-mini-label {
+  font-size: 11.5px;
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: left;
+}
 
 .tb-mini {
-  width: 36px;
-  height: 3px;
+  height: 2px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
   overflow: hidden;
@@ -256,15 +258,7 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   background: linear-gradient(90deg, #60a5fa, #c084fc);
 }
 
-.tb-mini-label {
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.tb-toggle svg { width: 12px; height: 12px; transform: rotate(180deg); transition: transform 0.2s var(--ease); }
+.tb-toggle svg { width: 11px; height: 11px; transform: rotate(180deg); transition: transform 0.2s var(--ease); opacity: 0.6; }
 .tb-toggle.collapsed svg { transform: rotate(0deg); }
 
 .timebar-switch { display: flex; gap: 2px; }
