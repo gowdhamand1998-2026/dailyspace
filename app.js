@@ -524,8 +524,10 @@ function renderDesktop(openId, widgetKind) {
         <div class="linkicon" data-link="${l.id}" style="left:${l.pos.x}%; top:${l.pos.y}%">
           <div class="linkicon-tile">
             <img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(new URL(l.url).hostname)}&sz=128"
-                 alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
-            <span class="linkicon-fallback" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
+                 alt=""
+                 onload="if(this.naturalWidth<32){this.style.display='none';this.nextElementSibling.style.display='flex'}"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+            <span class="linkicon-fallback" style="display:none">${escapeHtml(l.name.charAt(0).toUpperCase())}</span>
             <span class="linkicon-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></span>
           </div>
           <div class="icon-label">${escapeHtml(l.name)}</div>
