@@ -1008,25 +1008,20 @@ function windowHtml(id) {
           <div class="window-title">${escapeHtml(p.name)}</div>
         </div>
         <div class="window-body">
-          <input class="project-title" id="pj-name" value="${escapeHtml(p.name)}" maxlength="60" />
-          <textarea class="project-desc" id="pj-desc" rows="1"
-            placeholder="Add a short description...">${escapeHtml(p.description)}</textarea>
-
-          <div class="focus-box">
-            <div class="focus-label">Major focus</div>
-            <input class="focus-input" id="pj-focus" value="${escapeHtml(p.focus)}"
-              placeholder="What matters most right now?" maxlength="120" />
+          <div class="project-hero">
+            <input class="project-title" id="pj-name" value="${escapeHtml(p.name)}" maxlength="60" />
+            <textarea class="project-desc" id="pj-desc" rows="1"
+              placeholder="Add a short description...">${escapeHtml(p.description)}</textarea>
           </div>
 
-          <div class="columns">
-            ${sectionHtml("goals", "Goals", p.goals, "Add a goal...")}
-            ${sectionHtml("tasks", "Tasks", p.tasks, "Add a task...")}
-            <div class="panel panel-notes">
-              <div class="section-title">Notes</div>
-              <textarea class="notes-area" id="pj-notes"
-                placeholder="Ideas, links, anything...">${escapeHtml(p.notes)}</textarea>
-              <div class="save-hint" id="save-hint">&nbsp;</div>
-            </div>
+          ${sectionHtml("goals", "Goals", p.goals, "Add a goal...")}
+          ${sectionHtml("tasks", "Tasks", p.tasks, "Add a task...")}
+
+          <div class="panel panel-notes">
+            <div class="section-title">Notes</div>
+            <textarea class="notes-area" id="pj-notes"
+              placeholder="Ideas, links, anything...">${escapeHtml(p.notes)}</textarea>
+            <div class="save-hint" id="save-hint">&nbsp;</div>
           </div>
 
           <div class="danger-row">
@@ -1071,7 +1066,6 @@ function wireWindow(id) {
   // Inline editing: save on blur / Enter
   bindField("#pj-name", (v) => { p.name = v || p.name; });
   bindField("#pj-desc", (v) => { p.description = v; });
-  bindField("#pj-focus", (v) => { p.focus = v; });
 
   // Notes autosave (debounced)
   const notes = backdrop.querySelector("#pj-notes");
@@ -1133,7 +1127,7 @@ function sectionHtml(kind, label, items, placeholder) {
     .join("");
 
   return `
-    <div class="panel" data-section="${kind}">
+    <div class="panel panel-${kind}" data-section="${kind}">
       <div class="section-title">${label}
         <span class="section-count">${items.length ? `${doneCount} / ${items.length}` : ""}</span>
       </div>
