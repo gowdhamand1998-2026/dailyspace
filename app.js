@@ -154,15 +154,18 @@ let state = ensureDefaults(Store.load());
 
 const SUPABASE_URL = "https://xktzviuelnrfqpazdtvl.supabase.co";
 const SUPABASE_KEY = "sb_publishable_2kD95uDSNPp0eF1ocE9gQQ_S9wVwdZA";
+const OWNER_EMAIL = "gowdhaman.durairaj1998@gmail.com"; // the space belongs to this account
 const db = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-const cloud = { user: null, timer: null, status: "signedout" };
+const cloud = { user: null, timer: null, status: "signedout", ready: false };
 
 if (db) {
   db.auth.onAuthStateChange((_event, session) => {
+    cloud.ready = true;
     const hadUser = !!cloud.user;
     cloud.user = session ? session.user : null;
     if (cloud.user && !hadUser) loadCloud();
+    else route(); // no session → show the password gate
     if (!cloud.user) { cloud.status = "signedout"; updateSyncChip(); }
   });
 }
@@ -206,7 +209,7 @@ function scheduleCloudSave() {
 }
 
 const SYNC_LABELS = {
-  signedout: "Sign in", loading: "Loading…", saving: "Saving…",
+  signedout: "Locked", loading: "Loading…", saving: "Saving…",
   synced: "Synced", error: "Offline",
 };
 
@@ -223,75 +226,57 @@ function updateSyncChip() {
   }
 }
 
-function showSignInModal() {
-  if (app.querySelector(".window-backdrop")) return;
-
-  const backdrop = document.createElement("div");
-  backdrop.className = "window-backdrop";
-  backdrop.innerHTML = `
-    <div class="new-form">
-      <h3>Sign in</h3>
-      <p class="form-note">Your projects sync to every device you sign in on.</p>
-      <input type="email" id="si-email" placeholder="you@email.com" maxlength="120" autocomplete="email" />
-      <input type="password" id="si-pass" placeholder="Password" maxlength="100" autocomplete="current-password" />
-      <p class="form-error" id="si-error"></p>
-      <div class="row">
-        <button class="btn btn-ghost" id="si-signup">Create account</button>
-        <button class="btn btn-primary" id="si-signin">Sign in</button>
+/* full-screen password gate — the only way in */
+function renderGate(message) {
+  app.innerHTML = `
+    <div class="desktop">
+      <div class="gate">
+        <div class="gate-card">
+          <div class="gate-logo">Daily<em>Space</em></div>
+          ${cloud.ready ? `
+            <input type="password" id="gate-pass" placeholder="Enter password" maxlength="100" autocomplete="current-password" />
+            <p class="form-error" id="gate-error">${message || ""}</p>
+            <button class="btn btn-primary gate-btn" id="gate-enter">Enter</button>
+          ` : `<p class="form-note">Loading…</p>`}
+        </div>
       </div>
     </div>
   `;
-  app.appendChild(backdrop);
 
-  const emailInput = backdrop.querySelector("#si-email");
-  const passInput = backdrop.querySelector("#si-pass");
-  const errorEl = backdrop.querySelector("#si-error");
-  emailInput.focus();
+  const pass = app.querySelector("#gate-pass");
+  if (!pass) return;
+  pass.focus();
 
-  function close() { backdrop.remove(); }
+  async function unlock() {
+    const password = pass.value;
+    if (password.length < 6) return;
+    const errorEl = app.querySelector("#gate-error");
+    const btn = app.querySelector("#gate-enter");
+    btn.textContent = "…";
+    errorEl.textContent = "";
 
-  function values() {
-    const email = emailInput.value.trim();
-    const password = passInput.value;
-    if (!email || !email.includes("@")) { emailInput.focus(); return null; }
-    if (password.length < 6) {
-      errorEl.textContent = "Password needs at least 6 characters.";
-      passInput.focus();
-      return null;
+    const { error } = await db.auth.signInWithPassword({ email: OWNER_EMAIL, password });
+    if (!error) return; // onAuthStateChange opens the desktop
+
+    if (/invalid login/i.test(error.message)) {
+      // first ever visit: no account yet → this password becomes THE password
+      const { data, error: e2 } = await db.auth.signUp({ email: OWNER_EMAIL, password });
+      if (!e2 && data.session) return;
+      if (!e2 && data.user) {
+        errorEl.textContent = "First-time setup: confirm the email we just sent, then enter again.";
+        btn.textContent = "Enter";
+        return;
+      }
+      errorEl.textContent = "Wrong password.";
+    } else {
+      errorEl.textContent = error.message;
     }
-    return { email, password };
+    btn.textContent = "Enter";
+    pass.select();
   }
 
-  async function signIn() {
-    const v = values();
-    if (!v) return;
-    errorEl.textContent = "";
-    const { error } = await db.auth.signInWithPassword(v);
-    if (error) { errorEl.textContent = error.message; return; }
-    close(); // onAuthStateChange takes it from here
-  }
-
-  async function signUp() {
-    const v = values();
-    if (!v) return;
-    errorEl.textContent = "";
-    const { data, error } = await db.auth.signUp(v);
-    if (error) { errorEl.textContent = error.message; return; }
-    if (data.session) { close(); return; } // signed straight in
-    backdrop.querySelector(".new-form").innerHTML = `
-      <h3>Confirm your email</h3>
-      <p class="form-note">We sent a confirmation link to <strong>${escapeHtml(v.email)}</strong>. Click it once, then sign in here with your password.</p>
-      <div class="row"><button class="btn btn-primary" id="si-done">Done</button></div>`;
-    backdrop.querySelector("#si-done").addEventListener("click", close);
-  }
-
-  backdrop.querySelector("#si-signin").addEventListener("click", signIn);
-  backdrop.querySelector("#si-signup").addEventListener("click", signUp);
-  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
-  backdrop.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") signIn();
-    if (e.key === "Escape") close();
-  });
+  app.querySelector("#gate-enter").addEventListener("click", unlock);
+  pass.addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
 }
 
 let selectedId = null;
@@ -438,6 +423,9 @@ setInterval(() => {
 const app = document.getElementById("app");
 
 function route() {
+  // locked until the password is entered
+  if (db && !cloud.user) { renderGate(); return; }
+
   const wMatch = window.location.hash.match(/^#\/w\/(call|read|think|write)$/);
   if (wMatch) { renderDesktop(null, wMatch[1]); return; }
 
@@ -572,15 +560,10 @@ function wireDesktop() {
     }
   });
 
-  // cloud sync chip: sign in, or sign out when already in
+  // sync chip: click to lock the space again
   const syncChip = app.querySelector("[data-sync]");
   if (syncChip) syncChip.addEventListener("click", () => {
-    if (!db) return;
-    if (cloud.user) {
-      if (confirm(`Signed in as ${cloud.user.email}. Sign out?`)) db.auth.signOut();
-    } else {
-      showSignInModal();
-    }
+    if (db && cloud.user && confirm("Lock DailySpace?")) db.auth.signOut();
   });
 
   // hide / show the time progress bar
