@@ -304,6 +304,28 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+/* favicon loading chain: Google (big) → DuckDuckGo → the site itself → globe.
+   A source "succeeds" only if it returns a reasonably sharp image. */
+window.faviconCheck = function (img) {
+  const stage = +img.dataset.stage;
+  if (img.naturalWidth < 32 && stage < 2) window.faviconNext(img);
+};
+
+window.faviconNext = function (img) {
+  const stage = +img.dataset.stage;
+  const host = img.dataset.host;
+  if (stage === 0) {
+    img.dataset.stage = "1";
+    img.src = `https://icons.duckduckgo.com/ip3/${host}.ico`;
+  } else if (stage === 1) {
+    img.dataset.stage = "2";
+    img.src = `https://${host}/favicon.ico`;
+  } else {
+    img.style.display = "none";
+    img.nextElementSibling.style.display = "flex";
+  }
+};
+
 const CHECK_SVG =
   '<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6.5L4.5 9L10 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -524,9 +546,8 @@ function renderDesktop(openId, widgetKind) {
         <div class="linkicon" data-link="${l.id}" style="left:${l.pos.x}%; top:${l.pos.y}%">
           <div class="linkicon-tile">
             <img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(new URL(l.url).hostname)}&sz=128"
-                 alt=""
-                 onload="if(this.naturalWidth<32){this.style.display='none';this.nextElementSibling.style.display='flex'}"
-                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+                 alt="" data-host="${escapeHtml(new URL(l.url).hostname)}" data-stage="0"
+                 onload="faviconCheck(this)" onerror="faviconNext(this)" />
             <span class="linkicon-fallback" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5a14.5 14.5 0 0 1 3.8 9.5 14.5 14.5 0 0 1-3.8 9.5 14.5 14.5 0 0 1-3.8-9.5A14.5 14.5 0 0 1 12 2.5z"/></svg></span>
             <span class="linkicon-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></span>
           </div>
