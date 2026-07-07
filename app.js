@@ -309,11 +309,17 @@ function escapeHtml(str) {
    image that loads is the site's genuine icon — at whatever size exists.
    Chain: faviconV2 → site's apple-touch icon → site's favicon.ico → our globe. */
 function faviconUrl(host) {
-  return "https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL"
+  // fallback_opts deliberately excludes URL: with it, Google "succeeds" with
+  // an ugly generated globe for icon-less hosts; without it we get a clean 404
+  // and can move down the chain instead.
+  return "https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE"
     + `&url=https://${host}&size=128`;
 }
 
-window.faviconCheck = function () { /* any loaded image is genuine — keep it */ };
+/* belt-and-braces: if Google still sneaks a 16px default through, skip it */
+window.faviconCheck = function (img) {
+  if (img.src.includes("gstatic") && img.naturalWidth < 24) window.faviconNext(img);
+};
 
 /* "calendar.proton.me" → "proton.me" (icon services index root domains) */
 function rootDomain(host) {
