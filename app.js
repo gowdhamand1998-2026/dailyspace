@@ -209,9 +209,12 @@ function scheduleCloudSave() {
 }
 
 const SYNC_LABELS = {
-  signedout: "locked", loading: "loading", saving: "saving",
-  synced: "synced", error: "offline",
+  signedout: "Locked", loading: "Loading", saving: "Saving",
+  synced: "Synced", error: "Offline",
 };
+
+/* "day" → "Day" */
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 function syncChipHtml() {
   return `<span class="sync-dot"></span>${SYNC_LABELS[cloud.status] || ""}`;
@@ -404,7 +407,7 @@ function updateTimebar() {
   const miniLabel = document.getElementById("tb-mini-label");
   if (miniFill) {
     miniFill.style.width = pct + "%";
-    miniLabel.textContent = `${state.period} ${Math.round(pct)}%`;
+    miniLabel.textContent = `${cap(state.period)} · ${Math.round(pct)}%`;
   }
 }
 
@@ -487,13 +490,15 @@ function renderDesktop(openId, widgetKind) {
         <div class="menubar-right">
           <button class="sync-chip" id="sync-chip" data-sync data-state="${cloud.status}">${syncChipHtml()}</button>
           <span class="menu-sep"></span>
-          <span class="menu-date">${menuDate()}</span>
-          <span class="menu-clock" id="menu-clock">${clockNow()}</span>
+          <span class="menu-datetime">
+            <span class="menu-date">${menuDate()}</span>
+            <span class="menu-clock" id="menu-clock">${clockNow()}</span>
+          </span>
           <span class="menu-sep"></span>
           <button class="tb-toggle ${state.timebarHidden ? "collapsed" : ""}" data-tb-toggle
             title="${state.timebarHidden ? "Show" : "Hide"} time progress">
             <span class="tb-mini-wrap">
-              <span class="tb-mini-label" id="tb-mini-label">${state.period} ${Math.round(timeProgress(state.period).pct)}%</span>
+              <span class="tb-mini-label" id="tb-mini-label">${cap(state.period)} · ${Math.round(timeProgress(state.period).pct)}%</span>
               <span class="tb-mini"><span class="tb-mini-fill" id="tb-mini-fill" style="width:${timeProgress(state.period).pct}%"></span></span>
             </span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>

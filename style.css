@@ -96,10 +96,9 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 
 .menubar .wordmark {
   font-weight: 650;
-  font-size: 13.5px;
-  letter-spacing: 0.01em;
+  font-size: 13px;
+  letter-spacing: -0.01em;
   color: var(--text);
-  text-transform: lowercase;
 }
 .menubar .wordmark em { font-style: normal; font-weight: 400; color: var(--text-3); }
 
@@ -112,14 +111,15 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.22), transparent);
 }
 
-/* sync: just a breathing dot and a whispered word */
+/* sync: just a breathing dot and a quiet word */
 .sync-chip {
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 0;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 450;
+  line-height: 18px;
   color: var(--text-3);
   transition: color 0.15s;
 }
@@ -178,6 +178,13 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .gate-btn { justify-content: center; }
 .form-error { font-size: 12.5px; color: #f87171; min-height: 18px; margin: -2px 0; }
 
+.menu-datetime {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  line-height: 18px;
+}
+
 .menu-date {
   font-size: 12px;
   font-weight: 450;
@@ -185,11 +192,10 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 }
 
 .menu-clock {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text);
-  margin-left: -6px; /* clock sits close to its date */
 }
 
 .clock-colon { animation: colon-pulse 2s ease-in-out infinite; }
@@ -244,8 +250,9 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 }
 
 .tb-mini-label {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 450;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-align: left;
@@ -270,12 +277,11 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .timebar-switch { display: flex; gap: 2px; }
 
 .tb-btn {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: capitalize;
   color: var(--text-3);
-  padding: 3px 9px;
+  padding: 3px 10px;
   border-radius: 7px;
   transition: color 0.15s, background 0.15s;
 }
@@ -302,10 +308,9 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 }
 
 .timebar-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
   color: var(--text-2);
   white-space: nowrap;
   min-width: 110px;
