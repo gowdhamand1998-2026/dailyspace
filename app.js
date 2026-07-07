@@ -527,7 +527,7 @@ function renderDesktop(openId, widgetKind) {
                  alt=""
                  onload="if(this.naturalWidth<32){this.style.display='none';this.nextElementSibling.style.display='flex'}"
                  onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
-            <span class="linkicon-fallback" style="display:none">${escapeHtml(l.name.charAt(0).toUpperCase())}</span>
+            <span class="linkicon-fallback" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5a14.5 14.5 0 0 1 3.8 9.5 14.5 14.5 0 0 1-3.8 9.5 14.5 14.5 0 0 1-3.8-9.5A14.5 14.5 0 0 1 12 2.5z"/></svg></span>
             <span class="linkicon-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></span>
           </div>
           <div class="icon-label">${escapeHtml(l.name)}</div>
