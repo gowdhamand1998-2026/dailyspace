@@ -128,43 +128,28 @@ const WIDGETS = {
   write: { icon: WIDGET_ICONS.pen, tint: "#c084fc", source: "goals", label: "Writing", title: "Things to write", empty: "Nothing to write yet. Tag a goal with the pen icon when adding it." },
 };
 
-let state = Store.load();
-
-/* one-time upgrade for older saved data: widget positions + demo tagged tasks */
-if (!state.widgets) {
-  state.widgets = { call: { x: 87, y: 26 }, read: { x: 87, y: 56 } };
-  const first = state.projects[0];
-  if (first) {
-    first.tasks.push(
-      { id: uid(), text: "Call the domain registrar about dailyspace.com", done: false, tag: "call" },
-      { id: uid(), text: "Read 'Designing Data-Intensive Applications' ch. 3", done: false, tag: "read" }
-    );
-  }
+/* fills in any fields older / imported data might be missing */
+function ensureDefaults(s) {
+  if (!s.projects) s.projects = [];
+  s.projects.forEach((p, i) => {
+    if (!p.pos) p.pos = defaultPos(i);
+    if (!p.goals) p.goals = [];
+    if (!p.tasks) p.tasks = [];
+    if (p.notes === undefined) p.notes = "";
+  });
+  if (!s.widgets) s.widgets = {};
+  if (!s.widgets.call) s.widgets.call = { x: 92, y: 9 };
+  if (!s.widgets.read) s.widgets.read = { x: 92, y: 30 };
+  if (!s.widgets.think) s.widgets.think = { x: 92, y: 51 };
+  if (!s.widgets.write) s.widgets.write = { x: 92, y: 72 };
+  if (!s.links) s.links = [];
+  if (!s.period) s.period = "day";
+  if (s.timebarHidden === undefined) s.timebarHidden = false;
+  return s;
 }
 
-/* upgrade: thinking & writing widgets (goal-connected) */
-if (state.widgets && !state.widgets.think) {
-  state.widgets.think = { x: 91, y: 53 };
-  state.widgets.write = { x: 91, y: 74 };
-  const first = state.projects[0];
-  if (first) {
-    first.goals.push(
-      { id: uid(), text: "Think through the future database schema", done: false, tag: "think" },
-      { id: uid(), text: "Write the launch blog post", done: false, tag: "write" }
-    );
-  }
-}
-
-/* time-progress bar period + visibility */
-if (!state.period) state.period = "day";
-if (state.timebarHidden === undefined) state.timebarHidden = false;
-
-/* web links: desktop shortcuts to external sites */
-if (!state.links) {
-  state.links = [
-    { id: uid(), name: "GitHub", url: "https://github.com", pos: { x: 8, y: 26 } },
-  ];
-}
+const hadSavedData = !!localStorage.getItem(Store.KEY);
+let state = ensureDefaults(Store.load());
 
 let selectedId = null;
 let winMax = false;       // is the open window full screen?
@@ -172,6 +157,56 @@ let minimizedId = null;   // project whose window is minimized to the dock
 
 function persist() { Store.save(state); }
 persist();
+
+/* first visit in this browser: if the site folder ships a data.json,
+   load it instead of the seed (how exported data travels with the repo) */
+if (!hadSavedData) {
+  fetch("data.json")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (d && d.projects) {
+        state = ensureDefaults(d);
+        persist();
+        route();
+      }
+    })
+    .catch(() => {}); // no data.json — keep the seed
+}
+
+/* ---------- export / import ---------- */
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "data.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importData() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json,.json";
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const d = JSON.parse(reader.result);
+        if (!d.projects) throw new Error("not a DailySpace file");
+        state = ensureDefaults(d);
+        persist();
+        route();
+      } catch {
+        alert("That file doesn't look like a DailySpace export.");
+      }
+    };
+    reader.readAsText(file);
+  });
+  input.click();
+}
 
 function getProject(id) {
   return state.projects.find((p) => p.id === id);
@@ -191,6 +226,8 @@ const CHECK_SVG =
 const ICONS = {
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 007.07 0l2.83-2.83a5 5 0 00-7.07-7.07L11 5.93"/><path d="M14 10a5 5 0 00-7.07 0l-2.83 2.83a5 5 0 007.07 7.07L13 18.07"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>',
+  upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>',
 };
@@ -412,6 +449,9 @@ function renderDesktop(openId, widgetKind) {
         <button class="dock-btn" data-tip="Add" data-dock-add>${ICONS.plus}</button>
         <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="Tidy icons" data-dock-tidy>${ICONS.shuffle}</button>
+        <div class="dock-sep"></div>
+        <button class="dock-btn" data-tip="Export data" data-dock-export>${ICONS.download}</button>
+        <button class="dock-btn" data-tip="Import data" data-dock-import>${ICONS.upload}</button>
         ${minimizedId && getProject(minimizedId) ? `
         <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="${escapeHtml(getProject(minimizedId).name)}" data-dock-restore>
@@ -462,6 +502,8 @@ function wireDesktop() {
 
   // dock
   app.querySelector("[data-dock-add]").addEventListener("click", showAddChooser);
+  app.querySelector("[data-dock-export]").addEventListener("click", exportData);
+  app.querySelector("[data-dock-import]").addEventListener("click", importData);
   const restoreBtn = app.querySelector("[data-dock-restore]");
   if (restoreBtn) restoreBtn.addEventListener("click", () => {
     const id = minimizedId;
