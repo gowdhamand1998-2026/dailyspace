@@ -304,23 +304,20 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-/* favicon loading chain: Google (big) → DuckDuckGo → the site itself → globe.
-   A source "succeeds" only if it returns a reasonably sharp image. */
+/* favicon loading chain: Google (big) → the site's apple-touch icon →
+   the site's favicon.ico → our globe. Every stage must return a
+   reasonably sharp image (≥32px), otherwise we move on. */
 window.faviconCheck = function (img) {
-  const stage = +img.dataset.stage;
-  if (img.naturalWidth < 32 && stage < 2) window.faviconNext(img);
+  if (img.naturalWidth < 32) window.faviconNext(img);
 };
 
 window.faviconNext = function (img) {
   const stage = +img.dataset.stage;
   const host = img.dataset.host;
-  if (stage === 0) {
-    img.dataset.stage = "1";
-    img.src = `https://icons.duckduckgo.com/ip3/${host}.ico`;
-  } else if (stage === 1) {
-    img.dataset.stage = "2";
-    img.src = `https://${host}/favicon.ico`;
-  } else {
+  img.dataset.stage = String(stage + 1);
+  if (stage === 0) img.src = `https://${host}/apple-touch-icon.png`;
+  else if (stage === 1) img.src = `https://${host}/favicon.ico`;
+  else {
     img.style.display = "none";
     img.nextElementSibling.style.display = "flex";
   }
