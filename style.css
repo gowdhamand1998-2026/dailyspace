@@ -103,8 +103,14 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 }
 .menubar .wordmark em { font-style: normal; font-weight: 400; color: var(--text-3); }
 
-/* quiet typographic cluster — separated by spacing, not boxes */
-.menubar-right { display: flex; gap: 22px; align-items: center; }
+/* typographic cluster with hairline separators */
+.menubar-right { display: flex; gap: 14px; align-items: center; }
+
+.menu-sep {
+  width: 1px;
+  height: 14px;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.22), transparent);
+}
 
 /* sync: just a breathing dot and a whispered word */
 .sync-chip {
@@ -183,7 +189,7 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text);
-  margin-left: -12px; /* clock sits close to its date */
+  margin-left: -6px; /* clock sits close to its date */
 }
 
 .clock-colon { animation: colon-pulse 2s ease-in-out infinite; }

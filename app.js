@@ -486,8 +486,10 @@ function renderDesktop(openId, widgetKind) {
         <span class="wordmark">Daily<em>Space</em></span>
         <div class="menubar-right">
           <button class="sync-chip" id="sync-chip" data-sync data-state="${cloud.status}">${syncChipHtml()}</button>
+          <span class="menu-sep"></span>
           <span class="menu-date">${menuDate()}</span>
           <span class="menu-clock" id="menu-clock">${clockNow()}</span>
+          <span class="menu-sep"></span>
           <button class="tb-toggle ${state.timebarHidden ? "collapsed" : ""}" data-tb-toggle
             title="${state.timebarHidden ? "Show" : "Hide"} time progress">
             <span class="tb-mini-wrap">
