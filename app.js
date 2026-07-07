@@ -315,13 +315,26 @@ function faviconUrl(host) {
 
 window.faviconCheck = function () { /* any loaded image is genuine — keep it */ };
 
+/* "calendar.proton.me" → "proton.me" (icon services index root domains) */
+function rootDomain(host) {
+  const parts = host.split(".");
+  return parts.length > 2 ? parts.slice(-2).join(".") : host;
+}
+
 window.faviconNext = function (img) {
-  const stage = +img.dataset.stage;
   const host = img.dataset.host;
-  img.dataset.stage = String(stage + 1);
-  if (stage === 0) img.src = `https://${host}/apple-touch-icon.png`;
-  else if (stage === 1) img.src = `https://${host}/favicon.ico`;
-  else {
+  const root = rootDomain(host);
+  // build the source list once: subdomain first, then root domain
+  const sources = [faviconUrl(host)];
+  if (root !== host) sources.push(faviconUrl(root));
+  sources.push(`https://${host}/favicon.ico`);
+  if (root !== host) sources.push(`https://${root}/favicon.ico`);
+
+  const stage = +img.dataset.stage + 1;
+  img.dataset.stage = String(stage);
+  if (stage < sources.length) {
+    img.src = sources[stage];
+  } else {
     img.style.display = "none";
     img.nextElementSibling.style.display = "flex";
   }
