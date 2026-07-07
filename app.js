@@ -148,7 +148,6 @@ function ensureDefaults(s) {
   return s;
 }
 
-const hadSavedData = !!localStorage.getItem(Store.KEY);
 let state = ensureDefaults(Store.load());
 
 /* ---------- cloud sync (Supabase) ---------- */
@@ -231,44 +230,66 @@ function showSignInModal() {
   backdrop.className = "window-backdrop";
   backdrop.innerHTML = `
     <div class="new-form">
-      <h3>Sign in to sync</h3>
-      <p class="form-note">Your projects will follow you to any device. No password — we email you a magic link.</p>
-      <input type="email" id="si-email" placeholder="you@email.com" maxlength="120" />
+      <h3>Sign in</h3>
+      <p class="form-note">Your projects sync to every device you sign in on.</p>
+      <input type="email" id="si-email" placeholder="you@email.com" maxlength="120" autocomplete="email" />
+      <input type="password" id="si-pass" placeholder="Password" maxlength="100" autocomplete="current-password" />
+      <p class="form-error" id="si-error"></p>
       <div class="row">
-        <button class="btn btn-ghost" id="si-cancel">Cancel</button>
-        <button class="btn btn-primary" id="si-send">Send magic link</button>
+        <button class="btn btn-ghost" id="si-signup">Create account</button>
+        <button class="btn btn-primary" id="si-signin">Sign in</button>
       </div>
     </div>
   `;
   app.appendChild(backdrop);
 
   const emailInput = backdrop.querySelector("#si-email");
+  const passInput = backdrop.querySelector("#si-pass");
+  const errorEl = backdrop.querySelector("#si-error");
   emailInput.focus();
 
   function close() { backdrop.remove(); }
 
-  async function send() {
+  function values() {
     const email = emailInput.value.trim();
-    if (!email || !email.includes("@")) { emailInput.focus(); return; }
-    const btn = backdrop.querySelector("#si-send");
-    btn.textContent = "Sending…";
-    const { error } = await db.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin + window.location.pathname },
-    });
-    backdrop.querySelector(".new-form").innerHTML = error
-      ? `<h3>Something went wrong</h3><p class="form-note">${escapeHtml(error.message)}</p>
-         <div class="row"><button class="btn btn-ghost" id="si-cancel">Close</button></div>`
-      : `<h3>Check your email</h3><p class="form-note">We sent a sign-in link to <strong>${escapeHtml(email)}</strong>. Open it on this device and you're in.</p>
-         <div class="row"><button class="btn btn-primary" id="si-cancel">Done</button></div>`;
-    backdrop.querySelector("#si-cancel").addEventListener("click", close);
+    const password = passInput.value;
+    if (!email || !email.includes("@")) { emailInput.focus(); return null; }
+    if (password.length < 6) {
+      errorEl.textContent = "Password needs at least 6 characters.";
+      passInput.focus();
+      return null;
+    }
+    return { email, password };
   }
 
-  backdrop.querySelector("#si-send").addEventListener("click", send);
-  backdrop.querySelector("#si-cancel").addEventListener("click", close);
+  async function signIn() {
+    const v = values();
+    if (!v) return;
+    errorEl.textContent = "";
+    const { error } = await db.auth.signInWithPassword(v);
+    if (error) { errorEl.textContent = error.message; return; }
+    close(); // onAuthStateChange takes it from here
+  }
+
+  async function signUp() {
+    const v = values();
+    if (!v) return;
+    errorEl.textContent = "";
+    const { data, error } = await db.auth.signUp(v);
+    if (error) { errorEl.textContent = error.message; return; }
+    if (data.session) { close(); return; } // signed straight in
+    backdrop.querySelector(".new-form").innerHTML = `
+      <h3>Confirm your email</h3>
+      <p class="form-note">We sent a confirmation link to <strong>${escapeHtml(v.email)}</strong>. Click it once, then sign in here with your password.</p>
+      <div class="row"><button class="btn btn-primary" id="si-done">Done</button></div>`;
+    backdrop.querySelector("#si-done").addEventListener("click", close);
+  }
+
+  backdrop.querySelector("#si-signin").addEventListener("click", signIn);
+  backdrop.querySelector("#si-signup").addEventListener("click", signUp);
   backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
   backdrop.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") send();
+    if (e.key === "Enter") signIn();
     if (e.key === "Escape") close();
   });
 }
@@ -282,56 +303,6 @@ function persist() {
   scheduleCloudSave();    // debounced cloud save when signed in
 }
 persist();
-
-/* first visit in this browser: if the site folder ships a data.json,
-   load it instead of the seed (how exported data travels with the repo) */
-if (!hadSavedData) {
-  fetch("data.json")
-    .then((r) => (r.ok ? r.json() : null))
-    .then((d) => {
-      if (d && d.projects) {
-        state = ensureDefaults(d);
-        persist();
-        route();
-      }
-    })
-    .catch(() => {}); // no data.json — keep the seed
-}
-
-/* ---------- export / import ---------- */
-
-function exportData() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "data.json";
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function importData() {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = "application/json,.json";
-  input.addEventListener("change", () => {
-    const file = input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const d = JSON.parse(reader.result);
-        if (!d.projects) throw new Error("not a DailySpace file");
-        state = ensureDefaults(d);
-        persist();
-        route();
-      } catch {
-        alert("That file doesn't look like a DailySpace export.");
-      }
-    };
-    reader.readAsText(file);
-  });
-  input.click();
-}
 
 function getProject(id) {
   return state.projects.find((p) => p.id === id);
@@ -351,8 +322,6 @@ const CHECK_SVG =
 const ICONS = {
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 007.07 0l2.83-2.83a5 5 0 00-7.07-7.07L11 5.93"/><path d="M14 10a5 5 0 00-7.07 0l-2.83 2.83a5 5 0 007.07 7.07L13 18.07"/></svg>',
-  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>',
-  upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>',
 };
@@ -575,9 +544,6 @@ function renderDesktop(openId, widgetKind) {
         <button class="dock-btn" data-tip="Add" data-dock-add>${ICONS.plus}</button>
         <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="Tidy icons" data-dock-tidy>${ICONS.shuffle}</button>
-        <div class="dock-sep"></div>
-        <button class="dock-btn" data-tip="Export data" data-dock-export>${ICONS.download}</button>
-        <button class="dock-btn" data-tip="Import data" data-dock-import>${ICONS.upload}</button>
         ${minimizedId && getProject(minimizedId) ? `
         <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="${escapeHtml(getProject(minimizedId).name)}" data-dock-restore>
@@ -639,8 +605,6 @@ function wireDesktop() {
 
   // dock
   app.querySelector("[data-dock-add]").addEventListener("click", showAddChooser);
-  app.querySelector("[data-dock-export]").addEventListener("click", exportData);
-  app.querySelector("[data-dock-import]").addEventListener("click", importData);
   const restoreBtn = app.querySelector("[data-dock-restore]");
   if (restoreBtn) restoreBtn.addEventListener("click", () => {
     const id = minimizedId;
