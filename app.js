@@ -124,8 +124,8 @@ const WIDGET_ICONS = {
 const WIDGETS = {
   call: { icon: WIDGET_ICONS.phone, tint: "#4ade80", source: "tasks", label: "Calls", title: "People to call", empty: "No calls on your list. Tag a task with the phone icon when adding it." },
   read: { icon: WIDGET_ICONS.book, tint: "#60a5fa", source: "tasks", label: "Reading", title: "Things to read", empty: "Nothing to read yet. Tag a task with the book icon when adding it." },
-  think: { icon: WIDGET_ICONS.bulb, tint: "#fbbf24", source: "goals", label: "Thinking", title: "Things to think through", empty: "Nothing to think through yet. Tag a goal with the bulb icon when adding it." },
-  write: { icon: WIDGET_ICONS.pen, tint: "#c084fc", source: "goals", label: "Writing", title: "Things to write", empty: "Nothing to write yet. Tag a goal with the pen icon when adding it." },
+  think: { icon: WIDGET_ICONS.bulb, tint: "#fbbf24", source: "tasks", label: "Thinking", title: "Things to think through", empty: "Nothing to think through yet. Tag a task with the bulb icon when adding it." },
+  write: { icon: WIDGET_ICONS.pen, tint: "#c084fc", source: "tasks", label: "Writing", title: "Things to write", empty: "Nothing to write yet. Tag a task with the pen icon when adding it." },
 };
 
 /* fills in any fields older / imported data might be missing */
@@ -1120,11 +1120,12 @@ function sectionHtml(kind, label, items, placeholder) {
     )
     .join("");
 
-  // tasks tag as call / read; goals tag as think / write
-  const tagsFor = { tasks: ["call", "read"], goals: ["think", "write"] };
-  const tagButtons = (tagsFor[kind] || [])
-    .map((t) => `<button class="tag-btn" data-tag-btn="${t}" style="--wt:${WIDGETS[t].tint}" title="Tag as ${WIDGETS[t].label.toLowerCase()}">${WIDGETS[t].icon}</button>`)
-    .join("");
+  // all four tags live on tasks; goals have none
+  const tagButtons = kind === "tasks"
+    ? Object.keys(WIDGETS)
+        .map((t) => `<button class="tag-btn" data-tag-btn="${t}" style="--wt:${WIDGETS[t].tint}" title="Tag as ${WIDGETS[t].label.toLowerCase()}">${WIDGETS[t].icon}</button>`)
+        .join("")
+    : "";
 
   return `
     <div class="panel panel-${kind}" data-section="${kind}">
