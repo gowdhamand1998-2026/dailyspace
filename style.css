@@ -568,6 +568,154 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   white-space: nowrap;
 }
 
+/* ---------- collections (iOS-folder style) ---------- */
+
+.collection {
+  position: absolute;
+  width: 118px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  z-index: 2;
+  cursor: grab;
+  touch-action: none;
+}
+.collection:active { cursor: grabbing; }
+.collection.dragging { z-index: 6; }
+
+.collection-tile {
+  width: 74px;
+  height: 58px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.09);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 1fr;
+  gap: 4px;
+  padding: 7px 9px;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.collection:hover .collection-tile { transform: scale(1.06) translateY(-1px); }
+.collection.dragging .collection-tile { transform: scale(1.1); }
+
+.cmini { border-radius: 5px; min-height: 0; }
+.cmini-link {
+  background: rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.cmini-link img { width: 12px; height: 12px; border-radius: 3px; }
+
+/* while dragging, the moving icon must not eat elementFromPoint */
+.icon.dragging, .linkicon.dragging, .widget.dragging, .collection.dragging { pointer-events: none; }
+
+/* expanded collection panel */
+.collection-panel {
+  width: min(440px, 100%);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow:
+    0 50px 120px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  animation: pop 0.3s var(--ease) both;
+}
+
+.collection-title {
+  background: transparent;
+  border: 1px solid transparent;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  padding: 4px 10px;
+}
+.collection-title:hover { border-color: var(--line); }
+.collection-title:focus { border-color: var(--select); background: rgba(255, 255, 255, 0.05); box-shadow: none; }
+
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px 10px;
+  padding: 20px 6px;
+  min-height: 96px;
+  align-items: start;
+}
+.collection-grid .empty-hint { grid-column: 1 / -1; text-align: center; }
+
+.citem {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.citem-thumb {
+  width: 54px;
+  height: 43px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--pa, #888) 0%, color-mix(in srgb, var(--pa, #888) 55%, #000) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.15s var(--ease);
+}
+.citem:hover .citem-thumb { transform: scale(1.06); }
+
+.citem-linkthumb { background: rgba(255, 255, 255, 0.1); }
+.citem-linkthumb img { width: 22px; height: 22px; border-radius: 6px; }
+
+.citem-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  max-width: 82px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citem-remove {
+  position: absolute;
+  top: -7px;
+  right: 6px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: rgba(62, 63, 70, 0.95);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  padding: 0;
+}
+.citem:hover .citem-remove { opacity: 1; }
+.citem-remove:hover { color: #f87171; }
+
+.collection-footer { display: flex; justify-content: flex-end; }
+
 /* ---------- dock ---------- */
 
 .dock {
@@ -935,6 +1083,40 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 }
 .item:hover .item-delete { opacity: 1; }
 .item-delete:hover { color: #f87171; }
+
+/* attached link: always visible chip; attach/edit button shows on hover */
+.item-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  color: var(--select);
+  background: rgba(59, 130, 246, 0.12);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.item-link:hover { background: rgba(59, 130, 246, 0.25); }
+.item-link svg { width: 11px; height: 11px; }
+
+.item-linkbtn {
+  color: var(--text-3);
+  padding: 2px 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.item:hover .item-linkbtn { opacity: 1; }
+.item-linkbtn:hover { color: var(--text); }
+.item-linkbtn svg { width: 13px; height: 13px; }
+
+.item-text { cursor: text; }
+
+.edit-input {
+  flex: 1;
+  padding: 4px 9px;
+  font-size: 13.5px;
+}
 
 .add-row { display: flex; gap: 6px; margin-top: 12px; align-items: center; }
 .add-row input { padding: 7px 11px; font-size: 13.5px; }

@@ -143,6 +143,7 @@ function ensureDefaults(s) {
   if (!s.widgets.think) s.widgets.think = { x: 92, y: 51 };
   if (!s.widgets.write) s.widgets.write = { x: 92, y: 72 };
   if (!s.links) s.links = [];
+  if (!s.collections) s.collections = [];
   if (!s.period) s.period = "day";
   if (s.timebarHidden === undefined) s.timebarHidden = false;
   return s;
@@ -471,6 +472,12 @@ function route() {
   const wMatch = window.location.hash.match(/^#\/w\/(call|read|think|write)$/);
   if (wMatch) { renderDesktop(null, wMatch[1]); return; }
 
+  const cMatch = window.location.hash.match(/^#\/c\/(.+)$/);
+  if (cMatch && state.collections.find((c) => c.id === cMatch[1])) {
+    renderDesktop(null, null, cMatch[1]);
+    return;
+  }
+
   const match = window.location.hash.match(/^#\/p\/(.+)$/);
   const openId = match && getProject(match[1]) ? match[1] : null;
   if (openId && minimizedId === openId) minimizedId = null; // restoring from dock
@@ -492,7 +499,27 @@ function taggedTasks(tag) {
   return out;
 }
 
-function renderDesktop(openId, widgetKind) {
+/* is a project/link tucked inside some collection? */
+function inCollection(type, id) {
+  return state.collections.some((c) => c.items.some((i) => i.type === type && i.id === id));
+}
+
+/* iOS-folder-style mini preview: up to 4 tiles of what's inside */
+function collectionPreview(c) {
+  return c.items.slice(0, 4).map((it) => {
+    if (it.type === "project") {
+      const p = getProject(it.id);
+      if (!p) return "";
+      const a = accentFor(p.id);
+      return `<span class="cmini" style="background:linear-gradient(135deg, ${a}, color-mix(in srgb, ${a} 55%, #000))"></span>`;
+    }
+    const l = state.links.find((x) => x.id === it.id);
+    if (!l) return "";
+    return `<span class="cmini cmini-link"><img src="${faviconUrl(new URL(l.url).hostname)}" alt="" onerror="this.style.display='none'" /></span>`;
+  }).join("");
+}
+
+function renderDesktop(openId, widgetKind, collectionId) {
   const widgets = Object.entries(WIDGETS)
     .map(([kind, w]) => {
       const pending = taggedTasks(kind).filter((x) => !x.task.done).length;
@@ -508,6 +535,7 @@ function renderDesktop(openId, widgetKind) {
     .join("");
 
   const icons = state.projects
+    .filter((p) => !inCollection("project", p.id))
     .map((p) => {
       const total = p.tasks.length;
       const done = p.tasks.filter((t) => t.done).length;
@@ -562,7 +590,12 @@ function renderDesktop(openId, widgetKind) {
       <div class="desktop-items ${state.timebarHidden ? "" : "with-timebar"}" data-items>
       ${icons}
       ${widgets}
-      ${state.links.map((l) => `
+      ${state.collections.map((c) => `
+        <div class="collection" data-collection="${c.id}" style="left:${c.pos.x}%; top:${c.pos.y}%">
+          <div class="collection-tile">${collectionPreview(c)}</div>
+          <div class="icon-label">${escapeHtml(c.name)}</div>
+        </div>`).join("")}
+      ${state.links.filter((l) => !inCollection("link", l.id)).map((l) => `
         <div class="linkicon" data-link="${l.id}" style="left:${l.pos.x}%; top:${l.pos.y}%">
           <div class="linkicon-tile">
             <img src="${faviconUrl(new URL(l.url).hostname)}"
@@ -590,11 +623,13 @@ function renderDesktop(openId, widgetKind) {
     </div>
     ${openId ? windowHtml(openId) : ""}
     ${widgetKind ? widgetWindowHtml(widgetKind) : ""}
+    ${collectionId ? collectionHtml(collectionId) : ""}
   `;
 
   wireDesktop();
   if (openId) wireWindow(openId);
   if (widgetKind) wireWidgetWindow(widgetKind);
+  if (collectionId) wireCollection(collectionId);
 }
 
 function wireDesktop() {
@@ -645,16 +680,18 @@ function wireDesktop() {
     else window.location.hash = "#/p/" + id;
   });
   app.querySelector("[data-dock-tidy]").addEventListener("click", () => {
-    // compact grid: projects top-left row(s), links on the next row,
+    // compact grid: projects & collections top-left, links on the next row,
     // widgets stacked on the right edge
     const startX = 3.5, stepX = 6, perRow = 11, startY = 15, stepY = 15.5;
-    state.projects.forEach((p, i) => {
-      p.pos = { x: startX + (i % perRow) * stepX, y: startY + Math.floor(i / perRow) * stepY };
+    const gridPos = (n) => ({
+      x: startX + (n % perRow) * stepX,
+      y: startY + Math.floor(n / perRow) * stepY,
     });
-    const linkY = startY + Math.ceil(state.projects.length / perRow) * stepY;
-    state.links.forEach((l, i) => {
-      l.pos = { x: startX + (i % perRow) * stepX, y: linkY + Math.floor(i / perRow) * stepY };
-    });
+    let n = 0;
+    state.projects.filter((p) => !inCollection("project", p.id)).forEach((p) => (p.pos = gridPos(n++)));
+    state.collections.forEach((c) => (c.pos = gridPos(n++)));
+    n = Math.ceil(n / perRow) * perRow; // links start on a fresh row
+    state.links.filter((l) => !inCollection("link", l.id)).forEach((l) => (l.pos = gridPos(n++)));
     Object.keys(WIDGETS).forEach((k, i) => {
       state.widgets[k] = { x: 92, y: startY + i * stepY };
     });
@@ -662,97 +699,33 @@ function wireDesktop() {
     renderDesktop(null);
   });
 
-  // icons: drag / select / open
-  app.querySelectorAll("[data-icon]").forEach((el) => {
-    const id = el.dataset.icon;
-    const project = getProject(id);
+  /* dropping one icon onto another groups them into a collection (iOS-style);
+     dropping onto an existing collection adds to it */
+  function dropGroup(targetEl, type, id) {
+    if (targetEl.dataset.collection) {
+      const c = state.collections.find((x) => x.id === targetEl.dataset.collection);
+      c.items.push({ type, id });
+    } else {
+      const tType = targetEl.dataset.icon ? "project" : "link";
+      const tId = targetEl.dataset.icon || targetEl.dataset.link;
+      if (tType === type && tId === id) return false;
+      const tPos = tType === "project"
+        ? getProject(tId).pos
+        : state.links.find((l) => l.id === tId).pos;
+      state.collections.push({
+        id: uid(),
+        name: "Collection",
+        pos: { ...tPos },
+        items: [{ type: tType, id: tId }, { type, id }],
+      });
+    }
+    persist();
+    renderDesktop(null);
+    return true;
+  }
 
-    el.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      el.setPointerCapture(e.pointerId);
-
-      const rect = layer.getBoundingClientRect();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const origX = project.pos.x;
-      const origY = project.pos.y;
-      let dragged = false;
-
-      function onMove(ev) {
-        const dx = ev.clientX - startX;
-        const dy = ev.clientY - startY;
-        if (!dragged && Math.hypot(dx, dy) > 5) {
-          dragged = true;
-          el.classList.add("dragging");
-        }
-        if (dragged) {
-          project.pos.x = Math.min(96, Math.max(0, origX + (dx / rect.width) * 100));
-          project.pos.y = Math.min(92, Math.max(4, origY + (dy / rect.height) * 100));
-          el.style.left = project.pos.x + "%";
-          el.style.top = project.pos.y + "%";
-        }
-      }
-
-      function onUp() {
-        el.removeEventListener("pointermove", onMove);
-        el.removeEventListener("pointerup", onUp);
-        el.classList.remove("dragging");
-
-        if (dragged) persist(); // save the new position
-        else window.location.hash = "#/p/" + id; // single click opens
-      }
-
-      el.addEventListener("pointermove", onMove);
-      el.addEventListener("pointerup", onUp);
-    });
-  });
-
-  // web links: drag to move, click to confirm & open in a new tab
-  app.querySelectorAll("[data-link]").forEach((el) => {
-    const link = state.links.find((l) => l.id === el.dataset.link);
-
-    el.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      el.setPointerCapture(e.pointerId);
-
-      const rect = layer.getBoundingClientRect();
-      const startX = e.clientX, startY = e.clientY;
-      const origX = link.pos.x, origY = link.pos.y;
-      let dragged = false;
-
-      function onMove(ev) {
-        const dx = ev.clientX - startX;
-        const dy = ev.clientY - startY;
-        if (!dragged && Math.hypot(dx, dy) > 5) {
-          dragged = true;
-          el.classList.add("dragging");
-        }
-        if (dragged) {
-          link.pos.x = Math.min(96, Math.max(0, origX + (dx / rect.width) * 100));
-          link.pos.y = Math.min(92, Math.max(4, origY + (dy / rect.height) * 100));
-          el.style.left = link.pos.x + "%";
-          el.style.top = link.pos.y + "%";
-        }
-      }
-
-      function onUp() {
-        el.removeEventListener("pointermove", onMove);
-        el.removeEventListener("pointerup", onUp);
-        el.classList.remove("dragging");
-        if (dragged) persist();
-        else showOpenLinkModal(link);
-      }
-
-      el.addEventListener("pointermove", onMove);
-      el.addEventListener("pointerup", onUp);
-    });
-  });
-
-  // floating widgets: drag to move, click to open
-  app.querySelectorAll("[data-widget]").forEach((el) => {
-    const kind = el.dataset.widget;
-    const pos = state.widgets[kind];
-
+  /* shared drag behavior for desktop objects */
+  function draggable(el, pos, { onOpen, groupType, groupId }) {
     el.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       el.setPointerCapture(e.pointerId);
@@ -761,8 +734,10 @@ function wireDesktop() {
       const startX = e.clientX, startY = e.clientY;
       const origX = pos.x, origY = pos.y;
       let dragged = false;
+      let lastX = e.clientX, lastY = e.clientY;
 
       function onMove(ev) {
+        lastX = ev.clientX; lastY = ev.clientY;
         const dx = ev.clientX - startX;
         const dy = ev.clientY - startY;
         if (!dragged && Math.hypot(dx, dy) > 5) {
@@ -781,12 +756,56 @@ function wireDesktop() {
         el.removeEventListener("pointermove", onMove);
         el.removeEventListener("pointerup", onUp);
         el.classList.remove("dragging");
-        if (dragged) persist();
-        else window.location.hash = "#/w/" + kind;
+
+        if (!dragged) { onOpen(); return; }
+
+        // dropped on another icon/collection? (dragging el ignores pointer events)
+        if (groupType) {
+          const under = document.elementFromPoint(lastX, lastY);
+          const target = under && under.closest("[data-icon],[data-link],[data-collection]");
+          if (target && target !== el && dropGroup(target, groupType, groupId)) return;
+        }
+        persist(); // just a move
       }
 
       el.addEventListener("pointermove", onMove);
       el.addEventListener("pointerup", onUp);
+    });
+  }
+
+  // project icons
+  app.querySelectorAll("[data-icon]").forEach((el) => {
+    const id = el.dataset.icon;
+    draggable(el, getProject(id).pos, {
+      onOpen: () => (window.location.hash = "#/p/" + id),
+      groupType: "project",
+      groupId: id,
+    });
+  });
+
+  // collections
+  app.querySelectorAll("[data-collection]").forEach((el) => {
+    const c = state.collections.find((x) => x.id === el.dataset.collection);
+    draggable(el, c.pos, {
+      onOpen: () => (window.location.hash = "#/c/" + c.id),
+    });
+  });
+
+  // web links: drag to move (or group), click to confirm & open
+  app.querySelectorAll("[data-link]").forEach((el) => {
+    const link = state.links.find((l) => l.id === el.dataset.link);
+    draggable(el, link.pos, {
+      onOpen: () => showOpenLinkModal(link),
+      groupType: "link",
+      groupId: link.id,
+    });
+  });
+
+  // floating widgets: drag to move, click to open
+  app.querySelectorAll("[data-widget]").forEach((el) => {
+    const kind = el.dataset.widget;
+    draggable(el, state.widgets[kind], {
+      onOpen: () => (window.location.hash = "#/w/" + kind),
     });
   });
 }
@@ -807,12 +826,17 @@ function showAddChooser() {
         <button class="choice-card" id="ch-project">
           ${FOLDER_SVG}
           <span class="choice-name">Project</span>
-          <span class="choice-desc">Goals, tasks, focus & notes</span>
+          <span class="choice-desc">Goals, tasks & notes</span>
         </button>
         <button class="choice-card" id="ch-link">
           ${ICONS.link}
           <span class="choice-name">Link</span>
           <span class="choice-desc">Shortcut to a website</span>
+        </button>
+        <button class="choice-card" id="ch-collection">
+          ${ICONS.shuffle}
+          <span class="choice-name">Collection</span>
+          <span class="choice-desc">Group projects & links</span>
         </button>
       </div>
     </div>
@@ -823,6 +847,13 @@ function showAddChooser() {
 
   backdrop.querySelector("#ch-project").addEventListener("click", () => { close(); showNewProjectModal(); });
   backdrop.querySelector("#ch-link").addEventListener("click", () => { close(); showNewLinkModal(); });
+  backdrop.querySelector("#ch-collection").addEventListener("click", () => {
+    close();
+    const c = { id: uid(), name: "Collection", pos: defaultPos(state.collections.length + 5), items: [] };
+    state.collections.push(c);
+    persist();
+    window.location.hash = "#/c/" + c.id;
+  });
   backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
   backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
   backdrop.querySelector("#ch-project").focus();
@@ -933,10 +964,8 @@ function showNewLinkModal() {
   });
 }
 
-/* "Do you want to open this?" confirmation */
+/* "Do you want to open this?" confirmation (may stack over a collection panel) */
 function showOpenLinkModal(link) {
-  if (app.querySelector(".window-backdrop")) return;
-
   const backdrop = document.createElement("div");
   backdrop.className = "window-backdrop";
   backdrop.innerHTML = `
@@ -962,9 +991,12 @@ function showOpenLinkModal(link) {
   backdrop.querySelector("#ol-remove").addEventListener("click", () => {
     if (confirm(`Remove "${link.name}" from the desktop?`)) {
       state.links = state.links.filter((l) => l.id !== link.id);
+      state.collections.forEach((c) => {
+        c.items = c.items.filter((i) => !(i.type === "link" && i.id === link.id));
+      });
       persist();
       close();
-      renderDesktop(null);
+      route();
     }
   });
   backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
@@ -973,6 +1005,96 @@ function showOpenLinkModal(link) {
     if (e.key === "Enter") { window.open(link.url, "_blank", "noopener"); close(); }
   });
   backdrop.querySelector("#ol-open").focus();
+}
+
+/* ---------- collection panel (iOS folder expand) ---------- */
+
+function collectionHtml(id) {
+  const c = state.collections.find((x) => x.id === id);
+
+  const cells = c.items.map((it, idx) => {
+    if (it.type === "project") {
+      const p = getProject(it.id);
+      if (!p) return "";
+      return `
+        <div class="citem" data-citem="${idx}">
+          <span class="citem-thumb" style="--pa:${accentFor(p.id)}">${initials(p.name)}</span>
+          <span class="citem-label">${escapeHtml(p.name)}</span>
+          <button class="citem-remove" data-cremove="${idx}" title="Move back to desktop">&times;</button>
+        </div>`;
+    }
+    const l = state.links.find((x) => x.id === it.id);
+    if (!l) return "";
+    return `
+      <div class="citem" data-citem="${idx}">
+        <span class="citem-thumb citem-linkthumb"><img src="${faviconUrl(new URL(l.url).hostname)}" alt="" onerror="this.style.display='none'" /></span>
+        <span class="citem-label">${escapeHtml(l.name)}</span>
+        <button class="citem-remove" data-cremove="${idx}" title="Move back to desktop">&times;</button>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="window-backdrop" data-backdrop>
+      <div class="collection-panel">
+        <input class="collection-title" id="col-name" value="${escapeHtml(c.name)}" maxlength="40" />
+        <div class="collection-grid">
+          ${cells || `<div class="empty-hint">Empty — drag icons onto this collection's tile, on the desktop, to add them.</div>`}
+        </div>
+        <div class="collection-footer">
+          <button class="btn btn-danger" id="col-delete">Delete collection</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function wireCollection(id) {
+  const c = state.collections.find((x) => x.id === id);
+  const backdrop = app.querySelector("[data-backdrop]");
+
+  function close() { window.location.hash = "#/"; }
+  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  document.addEventListener("keydown", function esc(e) {
+    if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); }
+  });
+
+  // rename
+  const nameInput = backdrop.querySelector("#col-name");
+  nameInput.addEventListener("blur", () => {
+    c.name = nameInput.value.trim() || c.name;
+    persist();
+  });
+  nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") nameInput.blur(); });
+
+  // open items / remove items
+  backdrop.querySelectorAll("[data-citem]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      if (e.target.closest("[data-cremove]")) return;
+      const it = c.items[+el.dataset.citem];
+      if (it.type === "project") {
+        window.location.hash = "#/p/" + it.id;
+      } else {
+        const l = state.links.find((x) => x.id === it.id);
+        if (l) showOpenLinkModal(l);
+      }
+    });
+  });
+  backdrop.querySelectorAll("[data-cremove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      c.items.splice(+btn.dataset.cremove, 1);
+      persist();
+      renderDesktop(null, null, id);
+    });
+  });
+
+  // delete the collection; its contents return to the desktop
+  backdrop.querySelector("#col-delete").addEventListener("click", () => {
+    if (confirm(`Delete "${c.name}"? Its contents go back to the desktop.`)) {
+      state.collections = state.collections.filter((x) => x.id !== id);
+      persist();
+      close();
+    }
+  });
 }
 
 /* ---------- widget windows (Calls / Reading) ---------- */
@@ -1137,6 +1259,9 @@ function wireWindow(id) {
   backdrop.querySelector("#pj-delete").addEventListener("click", () => {
     if (confirm(`Delete "${p.name}"? This cannot be undone.`)) {
       state.projects = state.projects.filter((x) => x.id !== id);
+      state.collections.forEach((c) => {
+        c.items = c.items.filter((i) => !(i.type === "project" && i.id === id));
+      });
       selectedId = null;
       persist();
       window.location.hash = "#/";
@@ -1161,9 +1286,11 @@ function sectionHtml(kind, label, items, placeholder) {
       (item) => `
       <li class="item ${item.done ? "done" : ""}" data-id="${item.id}">
         <button class="item-check" data-toggle title="Toggle">${CHECK_SVG}</button>
-        <span class="item-text">
+        <span class="item-text" data-edit title="Click to edit">
           ${item.tag ? `<span class="item-tag" style="--wt:${WIDGETS[item.tag].tint}" title="${WIDGETS[item.tag].label}">${WIDGETS[item.tag].icon}</span>` : ""}${escapeHtml(item.text)}
         </span>
+        ${item.link ? `<a class="item-link" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" title="${escapeHtml(item.link)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>` : ""}
+        <button class="item-linkbtn" data-setlink title="${item.link ? "Edit link" : "Attach a link"}">${ICONS.link}</button>
         <button class="item-delete" data-delete title="Delete">&times;</button>
       </li>`
     )
@@ -1226,6 +1353,40 @@ function bindItemSection(kind, items, projectId) {
   section.querySelector("[data-add-btn]").addEventListener("click", add);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
 
+  /* swap the item's text for an input; mode "text" edits the wording,
+     mode "link" edits the attached URL */
+  function startEdit(li, item, mode) {
+    if (li.querySelector(".edit-input")) return;
+    const span = li.querySelector("[data-edit]");
+    const editInput = document.createElement("input");
+    editInput.className = "edit-input";
+    editInput.value = mode === "text" ? item.text : (item.link || "");
+    editInput.placeholder = mode === "link" ? "Paste a link — leave empty to remove" : "";
+    span.replaceWith(editInput);
+    editInput.focus();
+    if (mode === "text") editInput.select();
+
+    let cancelled = false;
+    editInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") editInput.blur();
+      if (e.key === "Escape") { cancelled = true; editInput.blur(); }
+    });
+    editInput.addEventListener("blur", () => {
+      if (!cancelled) {
+        const v = editInput.value.trim();
+        if (mode === "text") {
+          if (v) item.text = v;
+        } else if (!v) {
+          delete item.link;
+        } else {
+          item.link = /^https?:\/\//i.test(v) ? v : "https://" + v;
+        }
+        persist();
+      }
+      rerender();
+    });
+  }
+
   section.querySelectorAll(".item").forEach((li) => {
     const item = items.find((i) => i.id === li.dataset.id);
     li.querySelector("[data-toggle]").addEventListener("click", () => {
@@ -1239,5 +1400,7 @@ function bindItemSection(kind, items, projectId) {
       persist();
       rerender();
     });
+    li.querySelector("[data-edit]").addEventListener("click", () => startEdit(li, item, "text"));
+    li.querySelector("[data-setlink]").addEventListener("click", () => startEdit(li, item, "link"));
   });
 }
