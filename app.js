@@ -755,15 +755,19 @@ function wireDesktop() {
       function onUp() {
         el.removeEventListener("pointermove", onMove);
         el.removeEventListener("pointerup", onUp);
-        el.classList.remove("dragging");
 
-        if (!dragged) { onOpen(); return; }
+        if (!dragged) { el.classList.remove("dragging"); onOpen(); return; }
 
-        // dropped on another icon/collection? (dragging el ignores pointer events)
+        // dropped on another icon/collection? look through the element stack,
+        // skipping the dragged element itself
         if (groupType) {
-          const under = document.elementFromPoint(lastX, lastY);
+          const stack = document.elementsFromPoint(lastX, lastY);
+          const under = stack.find((node) => !el.contains(node) && node !== el);
           const target = under && under.closest("[data-icon],[data-link],[data-collection]");
+          el.classList.remove("dragging");
           if (target && target !== el && dropGroup(target, groupType, groupId)) return;
+        } else {
+          el.classList.remove("dragging");
         }
         persist(); // just a move
       }
@@ -1033,13 +1037,30 @@ function collectionHtml(id) {
       </div>`;
   }).join("");
 
+  // anything still sitting on the desktop can be added from here
+  const available = [
+    ...state.projects.filter((p) => !inCollection("project", p.id))
+      .map((p) => ({ type: "project", id: p.id, name: p.name })),
+    ...state.links.filter((l) => !inCollection("link", l.id))
+      .map((l) => ({ type: "link", id: l.id, name: l.name })),
+  ];
+
+  const addSection = available.length ? `
+    <div class="collection-addlabel">Add from desktop</div>
+    <div class="collection-add">
+      ${available.map((a) => `
+        <button class="add-chip" data-cadd="${a.type}:${a.id}">+ ${escapeHtml(a.name)}</button>
+      `).join("")}
+    </div>` : "";
+
   return `
     <div class="window-backdrop" data-backdrop>
       <div class="collection-panel">
         <input class="collection-title" id="col-name" value="${escapeHtml(c.name)}" maxlength="40" />
         <div class="collection-grid">
-          ${cells || `<div class="empty-hint">Empty — drag icons onto this collection's tile, on the desktop, to add them.</div>`}
+          ${cells || `<div class="empty-hint">Nothing here yet — add items below, or drag icons onto this collection's tile.</div>`}
         </div>
+        ${addSection}
         <div class="collection-footer">
           <button class="btn btn-danger" id="col-delete">Delete collection</button>
         </div>
@@ -1082,6 +1103,16 @@ function wireCollection(id) {
   backdrop.querySelectorAll("[data-cremove]").forEach((btn) => {
     btn.addEventListener("click", () => {
       c.items.splice(+btn.dataset.cremove, 1);
+      persist();
+      renderDesktop(null, null, id);
+    });
+  });
+
+  // add desktop items from inside the panel
+  backdrop.querySelectorAll("[data-cadd]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const [type, itemId] = btn.dataset.cadd.split(":");
+      c.items.push({ type, id: itemId });
       persist();
       renderDesktop(null, null, id);
     });
