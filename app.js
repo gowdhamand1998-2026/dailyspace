@@ -735,6 +735,21 @@ function wireDesktop() {
       const origX = pos.x, origY = pos.y;
       let dragged = false;
       let lastX = e.clientX, lastY = e.clientY;
+      let hoverTarget = null; // potential drop target under the pointer
+
+      function findTarget(x, y) {
+        const stack = document.elementsFromPoint(x, y);
+        const under = stack.find((node) => !el.contains(node) && node !== el);
+        const t = under && under.closest("[data-icon],[data-link],[data-collection]");
+        return t && t !== el ? t : null;
+      }
+
+      function setHover(t) {
+        if (t === hoverTarget) return;
+        if (hoverTarget) hoverTarget.classList.remove("drop-target");
+        hoverTarget = t;
+        if (hoverTarget) hoverTarget.classList.add("drop-target");
+      }
 
       function onMove(ev) {
         lastX = ev.clientX; lastY = ev.clientY;
@@ -749,6 +764,8 @@ function wireDesktop() {
           pos.y = Math.min(92, Math.max(4, origY + (dy / rect.height) * 100));
           el.style.left = pos.x + "%";
           el.style.top = pos.y + "%";
+          // light up whatever we'd merge into if released here
+          if (groupType) setHover(findTarget(ev.clientX, ev.clientY));
         }
       }
 
@@ -756,18 +773,15 @@ function wireDesktop() {
         el.removeEventListener("pointermove", onMove);
         el.removeEventListener("pointerup", onUp);
 
-        if (!dragged) { el.classList.remove("dragging"); onOpen(); return; }
+        setHover(null);
+        el.classList.remove("dragging");
 
-        // dropped on another icon/collection? look through the element stack,
-        // skipping the dragged element itself
+        if (!dragged) { onOpen(); return; }
+
+        // dropped on another icon/collection?
         if (groupType) {
-          const stack = document.elementsFromPoint(lastX, lastY);
-          const under = stack.find((node) => !el.contains(node) && node !== el);
-          const target = under && under.closest("[data-icon],[data-link],[data-collection]");
-          el.classList.remove("dragging");
-          if (target && target !== el && dropGroup(target, groupType, groupId)) return;
-        } else {
-          el.classList.remove("dragging");
+          const target = findTarget(lastX, lastY);
+          if (target && dropGroup(target, groupType, groupId)) return;
         }
         persist(); // just a move
       }
