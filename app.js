@@ -680,20 +680,31 @@ function wireDesktop() {
     else window.location.hash = "#/p/" + id;
   });
   app.querySelector("[data-dock-tidy]").addEventListener("click", () => {
-    // compact grid: projects & collections top-left, links on the next row,
-    // widgets stacked on the right edge
-    const startX = 3.5, stepX = 6, perRow = 11, startY = 15, stepY = 15.5;
+    // compact grid computed in PIXELS from the real window size, then stored
+    // as % — so icons never overlap on small screens and stay compact on big ones
+    const rect = app.querySelector("[data-items]").getBoundingClientRect();
+    const stepXpx = 136, stepYpx = 132;   // icon footprint incl. label + breathing room
+    const startXpx = 36, startYpx = 28;
+    const widgetColPx = 150;              // reserved column on the right for widgets
+    const perRow = Math.max(2, Math.floor((rect.width - widgetColPx - startXpx) / stepXpx));
+
     const gridPos = (n) => ({
-      x: startX + (n % perRow) * stepX,
-      y: startY + Math.floor(n / perRow) * stepY,
+      x: Math.min(96, ((startXpx + (n % perRow) * stepXpx) / rect.width) * 100),
+      y: Math.min(88, ((startYpx + Math.floor(n / perRow) * stepYpx) / rect.height) * 100),
     });
+
     let n = 0;
     state.projects.filter((p) => !inCollection("project", p.id)).forEach((p) => (p.pos = gridPos(n++)));
     state.collections.forEach((c) => (c.pos = gridPos(n++)));
     n = Math.ceil(n / perRow) * perRow; // links start on a fresh row
     state.links.filter((l) => !inCollection("link", l.id)).forEach((l) => (l.pos = gridPos(n++)));
+
+    const widgetX = ((rect.width - 120) / rect.width) * 100;
     Object.keys(WIDGETS).forEach((k, i) => {
-      state.widgets[k] = { x: 92, y: startY + i * stepY };
+      state.widgets[k] = {
+        x: widgetX,
+        y: Math.min(88, ((startYpx + i * stepYpx) / rect.height) * 100),
+      };
     });
     persist();
     renderDesktop(null);
