@@ -1179,23 +1179,32 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .item-link:hover { background: rgba(59, 130, 246, 0.25); }
 .item-link svg { width: 11px; height: 11px; }
 
-.item-linkbtn {
-  color: var(--text-3);
-  padding: 2px 4px;
-  opacity: 0;
-  transition: opacity 0.15s, color 0.15s;
-}
-.item:hover .item-linkbtn { opacity: 1; }
-.item-linkbtn:hover { color: var(--text); }
-.item-linkbtn svg { width: 13px; height: 13px; }
-
 .item-text { cursor: text; }
 
+/* inline task editor */
+.item.editing {
+  display: block;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  padding: 12px;
+  margin: 4px -9px;
+}
+.item.editing:hover { background: rgba(255, 255, 255, 0.05); }
+
+.item-editor { display: flex; flex-direction: column; gap: 8px; }
+
 .edit-input {
-  flex: 1;
-  padding: 4px 9px;
+  width: 100%;
+  padding: 7px 11px;
   font-size: 13.5px;
 }
+
+.editor-row { display: flex; gap: 6px; align-items: center; }
+.editor-row .edit-link { flex: 1; font-size: 12.5px; padding: 6px 10px; }
+
+.editor-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+.btn-sm { padding: 6px 13px; font-size: 12.5px; }
 
 .add-row { display: flex; gap: 6px; margin-top: 12px; align-items: center; }
 .add-row input { padding: 7px 11px; font-size: 13.5px; }

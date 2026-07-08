@@ -1447,7 +1447,6 @@ function sectionHtml(kind, label, items, placeholder) {
           ${item.tag ? `<span class="item-tag" style="--wt:${WIDGETS[item.tag].tint}" title="${WIDGETS[item.tag].label}">${WIDGETS[item.tag].icon}</span>` : ""}${escapeHtml(item.text)}
         </span>
         ${item.link ? `<a class="item-link" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" title="${escapeHtml(item.link)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>` : ""}
-        <button class="item-linkbtn" data-setlink title="${item.link ? "Edit link" : "Attach a link"}">${ICONS.link}</button>
         <button class="item-delete" data-delete title="Delete">&times;</button>
       </li>`
     )
@@ -1510,37 +1509,63 @@ function bindItemSection(kind, items, projectId) {
   section.querySelector("[data-add-btn]").addEventListener("click", add);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
 
-  /* swap the item's text for an input; mode "text" edits the wording,
-     mode "link" edits the attached URL */
-  function startEdit(li, item, mode) {
-    if (li.querySelector(".edit-input")) return;
-    const span = li.querySelector("[data-edit]");
-    const editInput = document.createElement("input");
-    editInput.className = "edit-input";
-    editInput.value = mode === "text" ? item.text : (item.link || "");
-    editInput.placeholder = mode === "link" ? "Paste a link — leave empty to remove" : "";
-    span.replaceWith(editInput);
-    editInput.focus();
-    if (mode === "text") editInput.select();
+  /* full inline editor: text, tag (switchable), link — all in one place */
+  function startEdit(li, item) {
+    if (li.classList.contains("editing")) return;
+    li.classList.add("editing");
 
-    let cancelled = false;
-    editInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") editInput.blur();
-      if (e.key === "Escape") { cancelled = true; editInput.blur(); }
+    const canTag = kind === "tasks";
+    let editTag = item.tag || null;
+
+    li.innerHTML = `
+      <div class="item-editor">
+        <input class="edit-input" id="ed-text" value="${escapeHtml(item.text)}" maxlength="200" />
+        <div class="editor-row">
+          ${canTag ? Object.keys(WIDGETS).map((t) => `
+            <button class="tag-btn ${editTag === t ? "active" : ""}" data-edtag="${t}"
+              style="--wt:${WIDGETS[t].tint}" title="${WIDGETS[t].label}">${WIDGETS[t].icon}</button>
+          `).join("") : ""}
+          <input class="edit-input edit-link" id="ed-link" value="${escapeHtml(item.link || "")}"
+            placeholder="Link (optional)" maxlength="300" />
+        </div>
+        <div class="editor-actions">
+          <button class="btn btn-ghost btn-sm" data-ed-cancel>Cancel</button>
+          <button class="btn btn-primary btn-sm" data-ed-save>Save</button>
+        </div>
+      </div>
+    `;
+
+    const textInput = li.querySelector("#ed-text");
+    const linkInput = li.querySelector("#ed-link");
+    textInput.focus();
+    textInput.select();
+
+    // tag switcher: tap to select, tap again to clear
+    li.querySelectorAll("[data-edtag]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        editTag = editTag === btn.dataset.edtag ? null : btn.dataset.edtag;
+        li.querySelectorAll("[data-edtag]").forEach((b) =>
+          b.classList.toggle("active", b.dataset.edtag === editTag)
+        );
+      });
     });
-    editInput.addEventListener("blur", () => {
-      if (!cancelled) {
-        const v = editInput.value.trim();
-        if (mode === "text") {
-          if (v) item.text = v;
-        } else if (!v) {
-          delete item.link;
-        } else {
-          item.link = /^https?:\/\//i.test(v) ? v : "https://" + v;
-        }
-        persist();
-      }
+
+    function save() {
+      const text = textInput.value.trim();
+      if (text) item.text = text;
+      item.tag = editTag;
+      const url = linkInput.value.trim();
+      if (!url) delete item.link;
+      else item.link = /^https?:\/\//i.test(url) ? url : "https://" + url;
+      persist();
       rerender();
+    }
+
+    li.querySelector("[data-ed-save]").addEventListener("click", save);
+    li.querySelector("[data-ed-cancel]").addEventListener("click", rerender);
+    li.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") save();
+      if (e.key === "Escape") rerender();
     });
   }
 
@@ -1557,7 +1582,6 @@ function bindItemSection(kind, items, projectId) {
       persist();
       rerender();
     });
-    li.querySelector("[data-edit]").addEventListener("click", () => startEdit(li, item, "text"));
-    li.querySelector("[data-setlink]").addEventListener("click", () => startEdit(li, item, "link"));
+    li.querySelector("[data-edit]").addEventListener("click", () => startEdit(li, item));
   });
 }
