@@ -731,38 +731,67 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .citem:hover .citem-remove { opacity: 1; }
 .citem-remove:hover { color: #f87171; }
 
-/* "add from desktop" chips inside the panel */
-.collection-addlabel {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+/* dashed "+" tile inside a collection */
+.citem-addthumb {
+  background: transparent;
+  border: 1.5px dashed var(--line-strong);
+  box-shadow: none;
   color: var(--text-3);
-  margin: 4px 0 8px;
+  font-size: 20px;
+  font-weight: 400;
+}
+.citem-add:hover .citem-addthumb { border-color: var(--text-2); color: var(--text); }
+.citem-add .citem-label { color: var(--text-3); }
+
+/* item picker (create collection / add items) */
+.picker-heading {
+  text-align: center;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  padding: 4px 0;
 }
 
-.collection-add {
+.picker-sub {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 8px;
+}
+
+.picker-empty { text-align: center; padding: 22px 0; }
+
+.pick-item .pick-check {
+  position: absolute;
+  top: -6px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--select);
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-bottom: 18px;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.15s, transform 0.15s var(--ease);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.5);
 }
+.pick-item.selected .pick-check { opacity: 1; transform: scale(1); }
+.pick-item.selected .citem-thumb {
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.35),
+    0 0 0 2.5px rgba(59, 130, 246, 0.7);
+}
+.pick-item .citem-thumb { transition: box-shadow 0.15s, transform 0.15s var(--ease); }
 
-.add-chip {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--text-2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 5px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.picker-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 14px;
 }
-.add-chip:hover { color: var(--text); border-color: var(--line-strong); background: rgba(255, 255, 255, 0.09); }
+.picker-actions .btn:disabled { opacity: 0.4; cursor: default; }
 
 .collection-footer { display: flex; justify-content: flex-end; }
 

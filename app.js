@@ -712,12 +712,17 @@ function wireDesktop() {
       const tPos = tType === "project"
         ? getProject(tId).pos
         : state.links.find((l) => l.id === tId).pos;
-      state.collections.push({
+      const c = {
         id: uid(),
         name: "Collection",
         pos: { ...tPos },
         items: [{ type: tType, id: tId }, { type, id }],
-      });
+      };
+      state.collections.push(c);
+      persist();
+      // open it right away so the user can name their new collection (iOS-style)
+      window.location.hash = "#/c/" + c.id;
+      return true;
     }
     persist();
     renderDesktop(null);
@@ -867,10 +872,7 @@ function showAddChooser() {
   backdrop.querySelector("#ch-link").addEventListener("click", () => { close(); showNewLinkModal(); });
   backdrop.querySelector("#ch-collection").addEventListener("click", () => {
     close();
-    const c = { id: uid(), name: "Collection", pos: defaultPos(state.collections.length + 5), items: [] };
-    state.collections.push(c);
-    persist();
-    window.location.hash = "#/c/" + c.id;
+    showCollectionComposer(null);
   });
   backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
   backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
@@ -1025,6 +1027,129 @@ function showOpenLinkModal(link) {
   backdrop.querySelector("#ol-open").focus();
 }
 
+/* ---------- collection composer (create / add items) ---------- */
+
+/* everything still sitting loose on the desktop */
+function availableItems() {
+  return [
+    ...state.projects.filter((p) => !inCollection("project", p.id))
+      .map((p) => ({ type: "project", id: p.id })),
+    ...state.links.filter((l) => !inCollection("link", l.id))
+      .map((l) => ({ type: "link", id: l.id })),
+  ];
+}
+
+function pickThumb(it) {
+  if (it.type === "project") {
+    const p = getProject(it.id);
+    return {
+      name: p.name,
+      thumb: `<span class="citem-thumb" style="--pa:${accentFor(p.id)}">${initials(p.name)}</span>`,
+    };
+  }
+  const l = state.links.find((x) => x.id === it.id);
+  return {
+    name: l.name,
+    thumb: `<span class="citem-thumb citem-linkthumb"><img src="${faviconUrl(new URL(l.url).hostname)}" alt="" onerror="this.style.display='none'" /></span>`,
+  };
+}
+
+/* one visual modal for both flows:
+   existing == null  → name a new collection + pick its contents
+   existing == coll  → pick items to add to it */
+function showCollectionComposer(existing) {
+  const avail = availableItems();
+  const selected = new Set();
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "window-backdrop";
+
+  const gridHtml = avail.length
+    ? `<div class="collection-grid picker-grid">
+        ${avail.map((it, i) => {
+          const t = pickThumb(it);
+          return `
+            <button class="citem pick-item" data-pick="${i}">
+              ${t.thumb}
+              <span class="citem-label">${escapeHtml(t.name)}</span>
+              <span class="pick-check">${CHECK_SVG}</span>
+            </button>`;
+        }).join("")}
+      </div>`
+    : `<div class="empty-hint picker-empty">Your desktop has nothing left to add.</div>`;
+
+  backdrop.innerHTML = `
+    <div class="collection-panel">
+      ${existing
+        ? `<div class="picker-heading">Add to “${escapeHtml(existing.name)}”</div>`
+        : `<input type="text" id="nc-name" placeholder="Collection name" maxlength="40" />`}
+      ${avail.length ? `<div class="picker-sub">Tap to choose what goes inside</div>` : ""}
+      ${gridHtml}
+      <div class="picker-actions">
+        <button class="btn btn-ghost" data-pk-cancel>Cancel</button>
+        <button class="btn btn-primary" data-pk-done>${existing ? "Add" : "Create"}</button>
+      </div>
+    </div>
+  `;
+  app.appendChild(backdrop);
+
+  const doneBtn = backdrop.querySelector("[data-pk-done]");
+  const nameInput = backdrop.querySelector("#nc-name");
+  if (nameInput) nameInput.focus();
+
+  function refreshDone() {
+    const n = selected.size;
+    if (existing) {
+      doneBtn.disabled = n === 0;
+      doneBtn.textContent = n ? `Add ${n} item${n > 1 ? "s" : ""}` : "Add";
+    } else {
+      doneBtn.textContent = n ? `Create with ${n} item${n > 1 ? "s" : ""}` : "Create";
+    }
+  }
+  refreshDone();
+
+  backdrop.querySelectorAll("[data-pick]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const i = +el.dataset.pick;
+      if (selected.has(i)) { selected.delete(i); el.classList.remove("selected"); }
+      else { selected.add(i); el.classList.add("selected"); }
+      refreshDone();
+    });
+  });
+
+  function close() { backdrop.remove(); }
+
+  function done() {
+    const items = [...selected].map((i) => avail[i]);
+    if (existing) {
+      if (!items.length) return;
+      existing.items.push(...items);
+      persist();
+      close();
+      renderDesktop(null, null, existing.id);
+    } else {
+      const c = {
+        id: uid(),
+        name: (nameInput.value.trim() || "Collection"),
+        pos: defaultPos(state.collections.length + 5),
+        items,
+      };
+      state.collections.push(c);
+      persist();
+      close();
+      renderDesktop(null);
+    }
+  }
+
+  doneBtn.addEventListener("click", done);
+  backdrop.querySelector("[data-pk-cancel]").addEventListener("click", close);
+  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") close();
+    if (e.key === "Enter" && e.target === nameInput) done();
+  });
+}
+
 /* ---------- collection panel (iOS folder expand) ---------- */
 
 function collectionHtml(id) {
@@ -1051,30 +1176,22 @@ function collectionHtml(id) {
       </div>`;
   }).join("");
 
-  // anything still sitting on the desktop can be added from here
-  const available = [
-    ...state.projects.filter((p) => !inCollection("project", p.id))
-      .map((p) => ({ type: "project", id: p.id, name: p.name })),
-    ...state.links.filter((l) => !inCollection("link", l.id))
-      .map((l) => ({ type: "link", id: l.id, name: l.name })),
-  ];
-
-  const addSection = available.length ? `
-    <div class="collection-addlabel">Add from desktop</div>
-    <div class="collection-add">
-      ${available.map((a) => `
-        <button class="add-chip" data-cadd="${a.type}:${a.id}">+ ${escapeHtml(a.name)}</button>
-      `).join("")}
-    </div>` : "";
+  // dashed "+" tile opens the visual picker (only if there's anything to add)
+  const addTile = availableItems().length
+    ? `<button class="citem citem-add" data-cadd-open title="Add items">
+        <span class="citem-thumb citem-addthumb">+</span>
+        <span class="citem-label">Add</span>
+      </button>`
+    : "";
 
   return `
     <div class="window-backdrop" data-backdrop>
       <div class="collection-panel">
         <input class="collection-title" id="col-name" value="${escapeHtml(c.name)}" maxlength="40" />
         <div class="collection-grid">
-          ${cells || `<div class="empty-hint">Nothing here yet — add items below, or drag icons onto this collection's tile.</div>`}
+          ${cells}${addTile}
+          ${!cells && !addTile ? `<div class="empty-hint picker-empty">This collection is empty.</div>` : ""}
         </div>
-        ${addSection}
         <div class="collection-footer">
           <button class="btn btn-danger" id="col-delete">Delete collection</button>
         </div>
@@ -1093,13 +1210,14 @@ function wireCollection(id) {
     if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); }
   });
 
-  // rename
+  // rename — and if it's a freshly drag-created collection, invite the rename
   const nameInput = backdrop.querySelector("#col-name");
   nameInput.addEventListener("blur", () => {
     c.name = nameInput.value.trim() || c.name;
     persist();
   });
   nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") nameInput.blur(); });
+  if (c.name === "Collection") { nameInput.focus(); nameInput.select(); }
 
   // open items / remove items
   backdrop.querySelectorAll("[data-citem]").forEach((el) => {
@@ -1122,15 +1240,9 @@ function wireCollection(id) {
     });
   });
 
-  // add desktop items from inside the panel
-  backdrop.querySelectorAll("[data-cadd]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const [type, itemId] = btn.dataset.cadd.split(":");
-      c.items.push({ type, id: itemId });
-      persist();
-      renderDesktop(null, null, id);
-    });
-  });
+  // "+" tile → visual picker for adding more items
+  const addOpen = backdrop.querySelector("[data-cadd-open]");
+  if (addOpen) addOpen.addEventListener("click", () => showCollectionComposer(c));
 
   // delete the collection; its contents return to the desktop
   backdrop.querySelector("#col-delete").addEventListener("click", () => {
