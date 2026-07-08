@@ -319,8 +319,32 @@ function faviconUrl(host) {
 
 /* belt-and-braces: if Google still sneaks a 16px default through, skip it */
 window.faviconCheck = function (img) {
-  if (img.src.includes("gstatic") && img.naturalWidth < 24) window.faviconNext(img);
+  if (img.src.includes("faviconV2") && img.naturalWidth < 24) window.faviconNext(img);
 };
+
+/* product-specific icons: Google serves one favicon per domain, so a Sheets
+   link would show the generic Google icon. These stable overrides fix that. */
+const ICON_OVERRIDES = [
+  { match: (u) => u.hostname === "docs.google.com" && u.pathname.startsWith("/spreadsheets"),
+    icon: "https://ssl.gstatic.com/docs/doclist/images/mediatype/icon_1_spreadsheet_x32.png" },
+  { match: (u) => u.hostname === "docs.google.com" && u.pathname.startsWith("/document"),
+    icon: "https://ssl.gstatic.com/docs/doclist/images/mediatype/icon_1_document_x32.png" },
+  { match: (u) => u.hostname === "docs.google.com" && u.pathname.startsWith("/presentation"),
+    icon: "https://ssl.gstatic.com/docs/doclist/images/mediatype/icon_1_presentation_x32.png" },
+  { match: (u) => u.hostname === "docs.google.com" && u.pathname.startsWith("/forms"),
+    icon: "https://ssl.gstatic.com/docs/doclist/images/mediatype/icon_1_form_x32.png" },
+];
+
+/* the right icon source for a full link URL (not just its domain) */
+function linkIconSrc(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    for (const o of ICON_OVERRIDES) if (o.match(u)) return o.icon;
+    return faviconUrl(u.hostname);
+  } catch {
+    return "";
+  }
+}
 
 /* "calendar.proton.me" → "proton.me" (icon services index root domains) */
 function rootDomain(host) {
@@ -515,7 +539,7 @@ function collectionPreview(c) {
     }
     const l = state.links.find((x) => x.id === it.id);
     if (!l) return "";
-    return `<span class="cmini cmini-link"><img src="${faviconUrl(new URL(l.url).hostname)}" alt="" onerror="this.style.display='none'" /></span>`;
+    return `<span class="cmini cmini-link"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>`;
   }).join("");
 }
 
@@ -598,7 +622,7 @@ function renderDesktop(openId, widgetKind, collectionId) {
       ${state.links.filter((l) => !inCollection("link", l.id)).map((l) => `
         <div class="linkicon" data-link="${l.id}" style="left:${l.pos.x}%; top:${l.pos.y}%">
           <div class="linkicon-tile">
-            <img src="${faviconUrl(new URL(l.url).hostname)}"
+            <img src="${linkIconSrc(l.url)}"
                  alt="" data-host="${escapeHtml(new URL(l.url).hostname)}" data-stage="0"
                  onload="faviconCheck(this)" onerror="faviconNext(this)" />
             <span class="linkicon-fallback" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5a14.5 14.5 0 0 1 3.8 9.5 14.5 14.5 0 0 1-3.8 9.5 14.5 14.5 0 0 1-3.8-9.5A14.5 14.5 0 0 1 12 2.5z"/></svg></span>
@@ -1061,7 +1085,7 @@ function pickThumb(it) {
   const l = state.links.find((x) => x.id === it.id);
   return {
     name: l.name,
-    thumb: `<span class="citem-thumb citem-linkthumb"><img src="${faviconUrl(new URL(l.url).hostname)}" alt="" onerror="this.style.display='none'" /></span>`,
+    thumb: `<span class="citem-thumb citem-linkthumb"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>`,
   };
 }
 
@@ -1181,7 +1205,7 @@ function collectionHtml(id) {
     if (!l) return "";
     return `
       <div class="citem" data-citem="${idx}">
-        <span class="citem-thumb citem-linkthumb"><img src="${faviconUrl(new URL(l.url).hostname)}" alt="" onerror="this.style.display='none'" /></span>
+        <span class="citem-thumb citem-linkthumb"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>
         <span class="citem-label">${escapeHtml(l.name)}</span>
         <button class="citem-remove" data-cremove="${idx}" title="Move back to desktop">&times;</button>
       </div>`;
@@ -1198,6 +1222,9 @@ function collectionHtml(id) {
   return `
     <div class="window-backdrop" data-backdrop>
       <div class="collection-panel">
+        <button class="panel-close" data-panel-close title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
         <input class="collection-title" id="col-name" value="${escapeHtml(c.name)}" maxlength="40" />
         <div class="collection-grid">
           ${cells}${addTile}
@@ -1216,6 +1243,7 @@ function wireCollection(id) {
   const backdrop = app.querySelector("[data-backdrop]");
 
   function close() { window.location.hash = "#/"; }
+  backdrop.querySelector("[data-panel-close]").addEventListener("click", close);
   backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
   document.addEventListener("keydown", function esc(e) {
     if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); }
