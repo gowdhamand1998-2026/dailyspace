@@ -849,7 +849,31 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   transition: opacity 0.15s, color 0.15s;
 }
 .crow:hover .crow-remove { opacity: 1; }
-.crow-remove:hover { color: #f87171; }
+.crow-remove:hover { color: var(--text); }
+
+/* instant tooltip so it reads as "goes back to desktop", not "deleted" */
+.crow-remove {
+  position: relative;
+}
+.crow-remove::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 7px);
+  background: rgba(40, 41, 48, 0.97);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 7px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 2;
+}
+.crow-remove:hover::after { opacity: 1; }
 
 .crow-add {
   justify-content: center;

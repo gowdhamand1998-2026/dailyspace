@@ -1204,7 +1204,7 @@ function collectionHtml(id) {
         ${t.thumb}
         <span class="crow-name">${escapeHtml(t.name)}</span>
         <span class="crow-kind">${t.kind}</span>
-        <button class="crow-remove" data-cremove="${idx}" title="Move back to desktop">&times;</button>
+        <button class="crow-remove" data-cremove="${idx}" data-tip="Remove from collection">&times;</button>
       </div>`;
   }).join("");
 
