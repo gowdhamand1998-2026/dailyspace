@@ -1074,18 +1074,23 @@ function availableItems() {
   ];
 }
 
-function pickThumb(it) {
+/* list-row thumbnail + labels for an item reference */
+function rowThumb(it) {
   if (it.type === "project") {
     const p = getProject(it.id);
+    if (!p) return null;
     return {
       name: p.name,
-      thumb: `<span class="citem-thumb" style="--pa:${accentFor(p.id)}">${initials(p.name)}</span>`,
+      kind: "Project",
+      thumb: `<span class="crow-thumb" style="--pa:${accentFor(p.id)}">${initials(p.name)}</span>`,
     };
   }
   const l = state.links.find((x) => x.id === it.id);
+  if (!l) return null;
   return {
     name: l.name,
-    thumb: `<span class="citem-thumb citem-linkthumb"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>`,
+    kind: "Link",
+    thumb: `<span class="crow-thumb crow-linkthumb"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>`,
   };
 }
 
@@ -1100,14 +1105,15 @@ function showCollectionComposer(existing) {
   backdrop.className = "window-backdrop";
 
   const gridHtml = avail.length
-    ? `<div class="collection-grid picker-grid">
+    ? `<div class="collection-list picker-list">
         ${avail.map((it, i) => {
-          const t = pickThumb(it);
+          const t = rowThumb(it);
           return `
-            <button class="citem pick-item" data-pick="${i}">
+            <button class="crow pick-row" data-pick="${i}">
               ${t.thumb}
-              <span class="citem-label">${escapeHtml(t.name)}</span>
-              <span class="pick-check">${CHECK_SVG}</span>
+              <span class="crow-name">${escapeHtml(t.name)}</span>
+              <span class="crow-kind">${t.kind}</span>
+              <span class="pick-circle">${CHECK_SVG}</span>
             </button>`;
         }).join("")}
       </div>`
@@ -1191,32 +1197,20 @@ function collectionHtml(id) {
   const c = state.collections.find((x) => x.id === id);
 
   const cells = c.items.map((it, idx) => {
-    if (it.type === "project") {
-      const p = getProject(it.id);
-      if (!p) return "";
-      return `
-        <div class="citem" data-citem="${idx}">
-          <span class="citem-thumb" style="--pa:${accentFor(p.id)}">${initials(p.name)}</span>
-          <span class="citem-label">${escapeHtml(p.name)}</span>
-          <button class="citem-remove" data-cremove="${idx}" title="Move back to desktop">&times;</button>
-        </div>`;
-    }
-    const l = state.links.find((x) => x.id === it.id);
-    if (!l) return "";
+    const t = rowThumb(it);
+    if (!t) return "";
     return `
-      <div class="citem" data-citem="${idx}">
-        <span class="citem-thumb citem-linkthumb"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>
-        <span class="citem-label">${escapeHtml(l.name)}</span>
-        <button class="citem-remove" data-cremove="${idx}" title="Move back to desktop">&times;</button>
+      <div class="crow" data-citem="${idx}">
+        ${t.thumb}
+        <span class="crow-name">${escapeHtml(t.name)}</span>
+        <span class="crow-kind">${t.kind}</span>
+        <button class="crow-remove" data-cremove="${idx}" title="Move back to desktop">&times;</button>
       </div>`;
   }).join("");
 
-  // dashed "+" tile opens the visual picker (only if there's anything to add)
+  // "+ Add items" row opens the visual picker (only if there's anything to add)
   const addTile = availableItems().length
-    ? `<button class="citem citem-add" data-cadd-open title="Add items">
-        <span class="citem-thumb citem-addthumb">+</span>
-        <span class="citem-label">Add</span>
-      </button>`
+    ? `<button class="crow crow-add" data-cadd-open>+ Add items</button>`
     : "";
 
   return `
@@ -1226,7 +1220,7 @@ function collectionHtml(id) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
         <input class="collection-title" id="col-name" value="${escapeHtml(c.name)}" maxlength="40" />
-        <div class="collection-grid">
+        <div class="collection-list">
           ${cells}${addTile}
           ${!cells && !addTile ? `<div class="empty-hint picker-empty">This collection is empty.</div>` : ""}
         </div>
