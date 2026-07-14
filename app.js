@@ -1675,11 +1675,11 @@ function sectionHtml(kind, label, items, placeholder) {
           ${item.tag ? `<span class="item-tag" style="--wt:${WIDGETS[item.tag].tint}" title="${WIDGETS[item.tag].label}">${WIDGETS[item.tag].icon}</span>` : ""}${escapeHtml(item.text)}
         </span>
         <span class="item-badges">
-          ${item.note ? `<button class="badge badge-note" data-notebtn title="Open note">${NOTE_SVG}</button>` : ""}
+          <button class="badge ${item.note ? "badge-note" : "badge-empty"}" data-notebtn
+            title="${item.note ? "Open note" : "Add a note"}">${NOTE_SVG}</button>
           ${item.link ? `<a class="badge badge-link" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" title="${escapeHtml(item.link)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>` : ""}
         </span>
         <span class="item-actions">
-          ${item.note ? "" : `<button class="action-btn" data-notebtn title="Add a note">${NOTE_SVG}</button>`}
           <button class="action-btn item-delete" data-delete title="Delete">&times;</button>
         </span>
       </li>`
