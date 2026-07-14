@@ -1555,6 +1555,12 @@ function windowHtml(id) {
             <button class="t-max" data-maximize title="Full screen"></button>
           </div>
           <div class="window-title">${escapeHtml(p.name)}</div>
+          <div class="titlebar-actions">
+            <button class="tb-action" data-tb-archive title="Archive project">${ICONS.archive}</button>
+            <button class="tb-action tb-action-danger" data-tb-delete title="Delete project">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+            </button>
+          </div>
         </div>
         <div class="window-body">
           <div class="project-hero">
@@ -1573,10 +1579,6 @@ function windowHtml(id) {
             <div class="save-hint" id="save-hint">&nbsp;</div>
           </div>
 
-          <div class="danger-row">
-            <button class="btn btn-ghost" id="pj-archive">Archive</button>
-            <button class="btn btn-danger" id="pj-delete">Delete project</button>
-          </div>
         </div>
       </div>
     </div>
@@ -1635,13 +1637,13 @@ function wireWindow(id) {
   bindItemSection("goals", p.goals, id);
   bindItemSection("tasks", p.tasks, id);
 
-  backdrop.querySelector("#pj-archive").addEventListener("click", () => {
+  backdrop.querySelector("[data-tb-archive]").addEventListener("click", () => {
     state.archived.push({ type: "project", id });
     persist();
     window.location.hash = "#/";
   });
 
-  backdrop.querySelector("#pj-delete").addEventListener("click", () => {
+  backdrop.querySelector("[data-tb-delete]").addEventListener("click", () => {
     if (confirm(`Delete "${p.name}"? This cannot be undone.`)) {
       state.projects = state.projects.filter((x) => x.id !== id);
       state.collections.forEach((c) => {

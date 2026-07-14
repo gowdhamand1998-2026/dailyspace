@@ -1207,11 +1207,28 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   font-size: 13px;
   font-weight: 500;
   color: var(--text-2);
-  margin-right: 55px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* archive / delete — opposite end from the traffic lights */
+.titlebar-actions { display: flex; gap: 4px; }
+
+.tb-action {
+  width: 25px;
+  height: 25px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  padding: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.tb-action:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+.tb-action svg { width: 14px; height: 14px; }
+.tb-action-danger:hover { color: #f87171; background: rgba(248, 113, 113, 0.12); }
 
 .window-body {
   padding: 26px 30px 30px;
