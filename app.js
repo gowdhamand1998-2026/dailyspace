@@ -1474,6 +1474,58 @@ function wirePeoplePage() {
   });
 }
 
+/* modal for connecting people to a task — rows with avatar, name, check circle */
+function showPeoplePickerModal(selectedSet, onDone, onGoPeople) {
+  const backdrop = document.createElement("div");
+  backdrop.className = "window-backdrop";
+  const temp = new Set(selectedSet);
+
+  const rows = state.people.map((per) => `
+    <button class="crow pick-row ${temp.has(per.id) ? "selected" : ""}" data-pick="${per.id}">
+      <span class="pchip" style="--pc:${per.color}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>
+      <span class="crow-name">${escapeHtml(per.name)}</span>
+      <span class="pick-circle">${CHECK_SVG}</span>
+    </button>`).join("");
+
+  backdrop.innerHTML = `
+    <div class="collection-panel">
+      <div class="picker-heading">Connect people</div>
+      ${state.people.length
+        ? `<div class="collection-list">${rows}</div>`
+        : `<div class="empty-hint picker-empty">No people yet — add them on the People page first.</div>`}
+      <div class="picker-actions">
+        ${state.people.length ? "" : `<button class="btn btn-ghost" data-gopeople>Open People page</button>`}
+        <button class="btn btn-ghost" data-pk-cancel>Cancel</button>
+        ${state.people.length ? `<button class="btn btn-primary" data-pk-done>Done</button>` : ""}
+      </div>
+    </div>
+  `;
+  app.appendChild(backdrop);
+
+  function close() { backdrop.remove(); }
+
+  backdrop.querySelectorAll("[data-pick]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const pid = el.dataset.pick;
+      if (temp.has(pid)) temp.delete(pid);
+      else temp.add(pid);
+      el.classList.toggle("selected", temp.has(pid));
+    });
+  });
+
+  const doneBtn = backdrop.querySelector("[data-pk-done]");
+  if (doneBtn) doneBtn.addEventListener("click", () => { onDone(temp); close(); });
+  const goBtn = backdrop.querySelector("[data-gopeople]");
+  if (goBtn) goBtn.addEventListener("click", () => { close(); onGoPeople(); });
+  backdrop.querySelector("[data-pk-cancel]").addEventListener("click", close);
+  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener("keydown", (e) => {
+    e.stopPropagation(); // don't leak Enter/Esc into the task editor behind
+    if (e.key === "Escape") close();
+    if (e.key === "Enter" && doneBtn) { onDone(temp); close(); }
+  });
+}
+
 function showAddPersonModal() {
   if (app.querySelector(".window-backdrop")) return;
 
@@ -2093,19 +2145,10 @@ function bindItemSection(kind, items, projectId) {
           <input class="edit-input edit-link" id="ed-link" value="${escapeHtml(item.link || "")}"
             placeholder="Link (optional)" maxlength="300" />
         </div>
-        ${kind !== "tasks" ? "" : `
-        <div class="editor-people">
-          <span id="ed-pchips"></span>
-          <button class="people-pick" data-ed-addppl>+ Add people</button>
-        </div>
-        <div class="editor-people editor-ppicker" id="ed-ppicker" style="display:none">
-          ${state.people.map((per) => `
-            <button class="people-pick ${editPeople.has(per.id) ? "active" : ""}" data-edper="${per.id}" style="--pc:${per.color}">
-              <span class="pchip" style="--pc:${per.color}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>${escapeHtml(per.name)}
-            </button>
-          `).join("")}
-        </div>`}
         <div class="editor-actions">
+          ${kind === "tasks" ? `
+          <button class="btn btn-ghost btn-sm editor-note-btn" data-ed-addppl>${ICONS.users} <span id="ed-ppl-label">Add people</span></button>
+          <span id="ed-pchips"></span>` : ""}
           <button class="btn btn-ghost btn-sm editor-note-btn" data-ed-note>${NOTE_SVG} ${item.note ? "Open doc" : "Add doc"}</button>
           <span class="editor-spacer"></span>
           <button class="btn btn-ghost btn-sm" data-ed-cancel>Cancel</button>
@@ -2129,10 +2172,9 @@ function bindItemSection(kind, items, projectId) {
       });
     });
 
-    // people connections: "+ Add people" reveals the picker
+    // people connections: opens a proper picker modal
     const pchipsEl = li.querySelector("#ed-pchips");
-    const pickerEl = li.querySelector("#ed-ppicker");
-    const addPplBtn = li.querySelector("[data-ed-addppl]");
+    const pplLabel = li.querySelector("#ed-ppl-label");
 
     function renderEdChips() {
       if (!pchipsEl) return;
@@ -2140,28 +2182,19 @@ function bindItemSection(kind, items, projectId) {
         const per = personById(pid);
         return per ? `<span class="pchip" style="--pc:${per.color}" title="${escapeHtml(per.name)}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>` : "";
       }).join("");
+      if (pplLabel) pplLabel.textContent = editPeople.size ? "People" : "Add people";
     }
     renderEdChips();
 
+    const addPplBtn = li.querySelector("[data-ed-addppl]");
     if (addPplBtn) addPplBtn.addEventListener("click", () => {
-      if (!state.people.length) {
-        // nobody to pick yet — save what's typed and go add people
-        applyEdits();
-        window.location.hash = "#/people";
-        return;
-      }
-      const open = pickerEl.style.display !== "none";
-      pickerEl.style.display = open ? "none" : "flex";
-      addPplBtn.textContent = open ? "+ Add people" : "Done";
-    });
-
-    li.querySelectorAll("[data-edper]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const pid = btn.dataset.edper;
-        if (editPeople.has(pid)) editPeople.delete(pid);
-        else editPeople.add(pid);
-        btn.classList.toggle("active", editPeople.has(pid));
+      showPeoplePickerModal(editPeople, (picked) => {
+        editPeople.clear();
+        picked.forEach((v) => editPeople.add(v));
         renderEdChips();
+      }, () => {
+        applyEdits(); // nobody to pick yet — keep edits and go add people
+        window.location.hash = "#/people";
       });
     });
 
