@@ -793,11 +793,13 @@ function wireDesktop() {
       y: Math.min(88, ((startYpx + Math.floor(n / perRow) * stepYpx) / rect.height) * 100),
     });
 
+    // only what's actually visible on the desktop gets a slot — no gaps
     let n = 0;
-    state.projects.filter((p) => !inCollection("project", p.id)).forEach((p) => (p.pos = gridPos(n++)));
-    state.collections.forEach((c) => (c.pos = gridPos(n++)));
+    state.projects.filter((p) => onDesktop("project", p.id)).forEach((p) => (p.pos = gridPos(n++)));
     n = Math.ceil(n / perRow) * perRow; // links start on a fresh row
-    state.links.filter((l) => !inCollection("link", l.id)).forEach((l) => (l.pos = gridPos(n++)));
+    state.links.filter((l) => onDesktop("link", l.id)).forEach((l) => (l.pos = gridPos(n++)));
+    n = Math.ceil(n / perRow) * perRow; // collections on their own row below
+    state.collections.filter((c) => !isArchived("collection", c.id)).forEach((c) => (c.pos = gridPos(n++)));
 
     const widgetX = ((rect.width - 120) / rect.width) * 100;
     Object.keys(WIDGETS).forEach((k, i) => {
