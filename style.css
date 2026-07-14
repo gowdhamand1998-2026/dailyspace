@@ -698,6 +698,251 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .note-editor p { margin: 8px 0; }
 
 
+/* ---------- people network page ---------- */
+
+.peoplepage {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(45% 40% at 50% 45%, rgba(90, 100, 135, 0.16), transparent),
+    linear-gradient(165deg, #17181d 0%, #0e0e11 55%, #0a0a0c 100%);
+  display: flex;
+  flex-direction: column;
+  animation: fade 0.2s var(--ease) both;
+}
+
+.peoplepage-title {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.people-map {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.people-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pline {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1px;
+  transition: stroke 0.2s;
+}
+.pline.active { stroke: rgba(255, 255, 255, 0.35); }
+
+.pnode {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.pnode-disc {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--pc, #888) 0%, color-mix(in srgb, var(--pc, #888) 50%, #000) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.45),
+    0 0 22px color-mix(in srgb, var(--pc, #888) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.pnode:hover .pnode-disc { transform: scale(1.08); }
+.pnode.selected .pnode-disc {
+  transform: scale(1.12);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.45),
+    0 0 34px color-mix(in srgb, var(--pc, #888) 55%, transparent),
+    0 0 0 3px rgba(255, 255, 255, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.pnode-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.pnode.selected .pnode-name { color: var(--text); }
+
+.pnode-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #fa3d31;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(250, 61, 49, 0.4);
+}
+
+/* the "Me" node */
+.pnode-me { cursor: default; z-index: 3; }
+.me-disc {
+  width: 74px;
+  height: 74px;
+  background: linear-gradient(135deg, #f3f4f6 0%, #9ca3af 100%);
+  color: #17181a;
+  font-size: 16px;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.5),
+    0 0 44px rgba(255, 255, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.pnode-me:hover .me-disc { transform: none; }
+
+.people-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--text-2);
+  padding: 0 24px;
+}
+.people-empty h3 { font-size: 20px; font-weight: 650; color: var(--text); letter-spacing: -0.02em; }
+.people-empty p { font-size: 13.5px; max-width: 340px; margin-bottom: 12px; }
+
+/* person side panel */
+.person-panel {
+  position: absolute;
+  top: 64px;
+  right: 18px;
+  bottom: 18px;
+  width: min(340px, calc(100% - 36px));
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-radius: 18px;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  padding: 22px;
+  overflow-y: auto;
+  animation: panel-in 0.25s var(--ease) both;
+  z-index: 5;
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.person-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+
+.person-name {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  padding: 3px 8px;
+  margin-left: -8px;
+}
+.person-name:hover { border-color: var(--line); }
+.person-name:focus { border-color: var(--select); background: rgba(255, 255, 255, 0.05); box-shadow: none; }
+
+.person-desc {
+  font-size: 13px;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 3px 8px;
+  margin-left: -8px;
+  resize: none;
+}
+.person-desc:hover { border-color: var(--line); }
+.person-desc:focus { border-color: var(--select); background: rgba(255, 255, 255, 0.05); box-shadow: none; }
+
+.person-tasks { margin-top: 4px; }
+
+.person-foot {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* avatar chips (task rows + pickers) */
+.pchip {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.95);
+  background: linear-gradient(135deg, var(--pc, #888) 0%, color-mix(in srgb, var(--pc, #888) 55%, #000) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+.pchip-lg { width: 38px; height: 38px; font-size: 15px; }
+
+/* people picker inside the task editor */
+.editor-people { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.people-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 11px 3px 3px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.people-pick .pchip { width: 21px; height: 21px; font-size: 10px; }
+.people-pick:hover { border-color: var(--line-strong); color: var(--text); }
+.people-pick.active {
+  border-color: var(--pc, var(--select));
+  background: color-mix(in srgb, var(--pc, #888) 14%, transparent);
+  color: var(--text);
+}
+
 /* ---------- collections (iOS-folder style) ---------- */
 
 .collection {

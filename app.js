@@ -146,6 +146,8 @@ function ensureDefaults(s) {
   if (!s.collections) s.collections = [];
   if (!s.archived) s.archived = [];
   if (!s.archivePos) s.archivePos = { x: 92, y: 84 };
+  if (!s.people) s.people = [];
+  if (!s.peoplePos) s.peoplePos = { x: 92, y: 84 };
   if (!s.period) s.period = "day";
   if (s.timebarHidden === undefined) s.timebarHidden = false;
   return s;
@@ -385,6 +387,7 @@ const ICONS = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>',
   archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
 };
 
 function initials(name) {
@@ -511,6 +514,7 @@ function route() {
   }
 
   if (window.location.hash === "#/a") { renderDesktop(null, null, null, true); return; }
+  if (window.location.hash === "#/people") { renderPeoplePage(); return; }
 
   const cMatch = window.location.hash.match(/^#\/c\/(.+)$/);
   if (cMatch && state.collections.find((c) => c.id === cMatch[1])) {
@@ -543,6 +547,36 @@ function taggedTasks(tag) {
 /* is a project/link tucked inside some collection? */
 function inCollection(type, id) {
   return state.collections.some((c) => c.items.some((i) => i.type === type && i.id === id));
+}
+
+/* ---------- people helpers ---------- */
+
+const PEOPLE_COLORS = ["#4ade80", "#60a5fa", "#fbbf24", "#c084fc", "#f87171", "#2dd4bf", "#fb923c", "#a3e635"];
+
+function personById(id) {
+  return state.people.find((p) => p.id === id);
+}
+
+/* every task (in non-archived projects) connected to this person */
+function tasksForPerson(pid) {
+  const out = [];
+  state.projects.forEach((p) => {
+    if (isArchived("project", p.id)) return;
+    p.tasks.forEach((t) => {
+      if (t.people && t.people.includes(pid)) out.push({ task: t, project: p });
+    });
+  });
+  return out;
+}
+
+/* small avatar chips shown on task rows */
+function personChipsHtml(item) {
+  if (!item.people || !item.people.length) return "";
+  return item.people.map((pid) => {
+    const per = personById(pid);
+    if (!per) return "";
+    return `<button class="pchip" data-pchip="${per.id}" style="--pc:${per.color}" title="${escapeHtml(per.name)}">${escapeHtml(per.name.charAt(0).toUpperCase())}</button>`;
+  }).join("");
 }
 
 function isArchived(type, id) {
@@ -645,6 +679,16 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
           <div class="collection-tile">${collectionPreview(c)}</div>
           <div class="icon-label">${escapeHtml(c.name)}</div>
         </div>`).join("")}
+      <div class="widget" data-people style="left:${state.peoplePos.x}%; top:${state.peoplePos.y}%; --wt:#f472b6">
+        <div class="widget-tile">${ICONS.users}
+          ${(() => {
+            const pending = state.people.filter((per) =>
+              tasksForPerson(per.id).some((x) => !x.task.done)).length;
+            return pending ? `<span class="widget-badge">${pending}</span>` : "";
+          })()}
+        </div>
+        <div class="icon-label">People</div>
+      </div>
       ${state.links.filter((l) => onDesktop("link", l.id)).map((l) => `
         <div class="linkicon" data-link="${l.id}" style="left:${l.pos.x}%; top:${l.pos.y}%">
           <div class="linkicon-tile">
@@ -762,6 +806,10 @@ function wireDesktop() {
         y: Math.min(88, ((startYpx + i * stepYpx) / rect.height) * 100),
       };
     });
+    state.peoplePos = {
+      x: widgetX,
+      y: Math.min(88, ((startYpx + Object.keys(WIDGETS).length * stepYpx) / rect.height) * 100),
+    };
     persist();
     renderDesktop(null);
   });
@@ -896,6 +944,12 @@ function wireDesktop() {
   // archive lives in the dock: click opens it, dragging icons onto it archives them
   const archiveEl = app.querySelector("[data-archive]");
   if (archiveEl) archiveEl.addEventListener("click", () => (window.location.hash = "#/a"));
+
+  // people object: drag to move, click to open the network page
+  const peopleEl = app.querySelector("[data-people]");
+  if (peopleEl) draggable(peopleEl, state.peoplePos, {
+    onOpen: () => (window.location.hash = "#/people"),
+  });
 
   // web links: drag to move (or group), click to confirm & open
   app.querySelectorAll("[data-link]").forEach((el) => {
@@ -1220,6 +1274,251 @@ function renderNotePage(pid, kind, itemId) {
       hint.textContent = "saved";
       setTimeout(() => (hint.innerHTML = "&nbsp;"), 1500);
     }, 500);
+  });
+}
+
+/* ---------- people network page ---------- */
+
+let selectedPersonId = null;
+
+function renderPeoplePage() {
+  const ppl = state.people;
+  const cx = 50, cy = 47;      // "Me" sits here (in % of the map)
+  const rx = 34, ry = 32;      // orbit radii
+
+  const nodes = ppl.map((per, i) => {
+    const a = (i / ppl.length) * Math.PI * 2 - Math.PI / 2;
+    return { per, x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) };
+  });
+
+  const lines = nodes.map((n) => `
+    <line x1="${cx}" y1="${cy}" x2="${n.x}" y2="${n.y}"
+      class="pline ${selectedPersonId === n.per.id ? "active" : ""}"
+      vector-effect="non-scaling-stroke" />`).join("");
+
+  const nodeHtml = nodes.map((n) => {
+    const open = tasksForPerson(n.per.id).filter((x) => !x.task.done).length;
+    return `
+      <div class="pnode ${selectedPersonId === n.per.id ? "selected" : ""}"
+           data-person="${n.per.id}" style="left:${n.x}%; top:${n.y}%; --pc:${n.per.color}">
+        <div class="pnode-disc">${initials(n.per.name)}
+          ${open ? `<span class="pnode-badge">${open}</span>` : ""}
+        </div>
+        <div class="pnode-name">${escapeHtml(n.per.name)}</div>
+      </div>`;
+  }).join("");
+
+  app.innerHTML = `
+    <div class="peoplepage">
+      <div class="notepage-bar">
+        <button class="back-btn" data-back>&larr; Desktop</button>
+        <div class="peoplepage-title">People</div>
+        <button class="btn btn-ghost btn-sm" data-addperson>+ Add person</button>
+      </div>
+      <div class="people-map" data-map>
+        ${ppl.length ? `
+          <svg class="people-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>
+          ${nodeHtml}
+          <div class="pnode pnode-me" style="left:${cx}%; top:${cy}%">
+            <div class="pnode-disc me-disc">Me</div>
+          </div>
+        ` : `
+          <div class="people-empty">
+            <h3>No people yet</h3>
+            <p>Add the people in your orbit, then connect them to tasks from the task editor.</p>
+            <button class="btn btn-primary" data-addperson-2>+ Add person</button>
+          </div>`}
+      </div>
+      ${selectedPersonId && personById(selectedPersonId) ? personPanelHtml(selectedPersonId) : ""}
+    </div>
+  `;
+
+  wirePeoplePage();
+}
+
+function personPanelHtml(pid) {
+  const per = personById(pid);
+  const connected = tasksForPerson(pid);
+  const pending = connected.filter((x) => !x.task.done);
+  const done = connected.filter((x) => x.task.done);
+
+  const row = ({ task, project }) => `
+    <li class="item ${task.done ? "done" : ""}" style="--pa:${accentFor(project.id)}">
+      <button class="item-check" data-ptoggle="${task.id}" title="Toggle">${CHECK_SVG}</button>
+      <span class="item-text">${escapeHtml(task.text)}</span>
+      <button class="project-chip" data-goto="${project.id}">${escapeHtml(project.name)}</button>
+    </li>`;
+
+  return `
+    <div class="person-panel">
+      <button class="panel-close" data-panel-close title="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="person-head">
+        <span class="pchip pchip-lg" style="--pc:${per.color}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>
+        <input class="person-name" id="pp-name" value="${escapeHtml(per.name)}" maxlength="60" />
+      </div>
+      <textarea class="person-desc" id="pp-desc" rows="2"
+        placeholder="Who is this? Add a short description...">${escapeHtml(per.desc || "")}</textarea>
+
+      <div class="section-title" style="margin-top:16px;">Connected tasks
+        <span class="section-count">${connected.length ? `${done.length} / ${connected.length}` : ""}</span>
+      </div>
+      ${connected.length
+        ? `<ul class="item-list person-tasks">${pending.map(row).join("")}${done.map(row).join("")}</ul>`
+        : `<div class="empty-hint">No tasks yet — open a task's editor and tap ${escapeHtml(per.name)} to connect one.</div>`}
+
+      <div class="person-foot">
+        <button class="btn btn-danger btn-sm" data-person-delete>Remove person</button>
+      </div>
+    </div>
+  `;
+}
+
+function wirePeoplePage() {
+  app.querySelector("[data-back]").addEventListener("click", () => {
+    selectedPersonId = null;
+    window.location.hash = "#/";
+  });
+  document.addEventListener("keydown", function esc(e) {
+    if (e.key === "Escape") {
+      document.removeEventListener("keydown", esc);
+      if (selectedPersonId) { selectedPersonId = null; renderPeoplePage(); }
+      else window.location.hash = "#/";
+    }
+  });
+
+  // add person
+  app.querySelectorAll("[data-addperson], [data-addperson-2]").forEach((b) =>
+    b.addEventListener("click", showAddPersonModal)
+  );
+
+  // select a node
+  app.querySelectorAll("[data-person]").forEach((el) => {
+    el.addEventListener("click", () => {
+      selectedPersonId = el.dataset.person;
+      renderPeoplePage();
+    });
+  });
+
+  // click empty map → clear selection
+  const map = app.querySelector("[data-map]");
+  map.addEventListener("pointerdown", (e) => {
+    if ((e.target === map || e.target.classList.contains("people-lines")) && selectedPersonId) {
+      selectedPersonId = null;
+      renderPeoplePage();
+    }
+  });
+
+  // panel wiring
+  const panel = app.querySelector(".person-panel");
+  if (!panel) return;
+  const per = personById(selectedPersonId);
+
+  panel.querySelector("[data-panel-close]").addEventListener("click", () => {
+    selectedPersonId = null;
+    renderPeoplePage();
+  });
+
+  const nameInput = panel.querySelector("#pp-name");
+  nameInput.addEventListener("blur", () => {
+    per.name = nameInput.value.trim() || per.name;
+    persist();
+    renderPeoplePage();
+  });
+  nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") nameInput.blur(); });
+
+  const descInput = panel.querySelector("#pp-desc");
+  descInput.addEventListener("blur", () => {
+    per.desc = descInput.value.trim();
+    persist();
+  });
+
+  // seamless task toggles inside the panel
+  panel.querySelectorAll("[data-ptoggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const taskId = btn.dataset.ptoggle;
+      state.projects.forEach((p) => {
+        const t = p.tasks.find((x) => x.id === taskId);
+        if (t) {
+          t.done = !t.done;
+          btn.closest(".item").classList.toggle("done", t.done);
+        }
+      });
+      persist();
+    });
+  });
+
+  panel.querySelectorAll("[data-goto]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedPersonId = null;
+      window.location.hash = "#/p/" + btn.dataset.goto;
+    });
+  });
+
+  panel.querySelector("[data-person-delete]").addEventListener("click", () => {
+    if (confirm(`Remove "${per.name}"? Their task connections will be cleared.`)) {
+      state.people = state.people.filter((x) => x.id !== per.id);
+      state.projects.forEach((p) =>
+        p.tasks.forEach((t) => {
+          if (t.people) {
+            t.people = t.people.filter((x) => x !== per.id);
+            if (!t.people.length) delete t.people;
+          }
+        })
+      );
+      selectedPersonId = null;
+      persist();
+      renderPeoplePage();
+    }
+  });
+}
+
+function showAddPersonModal() {
+  if (app.querySelector(".window-backdrop")) return;
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "window-backdrop";
+  backdrop.innerHTML = `
+    <div class="new-form">
+      <h3>Add person</h3>
+      <input type="text" id="np-pname" placeholder="Name" maxlength="60" />
+      <input type="text" id="np-pdesc" placeholder="Who are they? (optional)" maxlength="140" />
+      <div class="row">
+        <button class="btn btn-ghost" id="np-pcancel">Cancel</button>
+        <button class="btn btn-primary" id="np-pcreate">Add</button>
+      </div>
+    </div>
+  `;
+  app.appendChild(backdrop);
+
+  const nameInput = backdrop.querySelector("#np-pname");
+  nameInput.focus();
+
+  function close() { backdrop.remove(); }
+
+  function create() {
+    const name = nameInput.value.trim();
+    if (!name) { nameInput.focus(); return; }
+    const per = {
+      id: uid(),
+      name,
+      desc: backdrop.querySelector("#np-pdesc").value.trim(),
+      color: PEOPLE_COLORS[state.people.length % PEOPLE_COLORS.length],
+    };
+    state.people.push(per);
+    selectedPersonId = per.id;
+    persist();
+    close();
+    renderPeoplePage();
+  }
+
+  backdrop.querySelector("#np-pcreate").addEventListener("click", create);
+  backdrop.querySelector("#np-pcancel").addEventListener("click", close);
+  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") create();
+    if (e.key === "Escape") close();
   });
 }
 
@@ -1680,6 +1979,7 @@ function sectionHtml(kind, label, items, placeholder) {
         <span class="item-badges">
           ${item.note ? `<button class="badge badge-note" data-notebtn title="Open doc">${NOTE_SVG}</button>` : ""}
           ${item.link ? `<a class="badge badge-link" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" title="${escapeHtml(item.link)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>` : ""}
+          ${personChipsHtml(item)}
         </span>
         <span class="item-actions">
           <button class="action-btn item-delete" data-delete title="Delete">&times;</button>
@@ -1752,6 +2052,7 @@ function bindItemSection(kind, items, projectId) {
 
     const canTag = kind === "tasks";
     let editTag = item.tag || null;
+    const editPeople = new Set(item.people || []);
 
     li.innerHTML = `
       <div class="item-editor">
@@ -1764,6 +2065,14 @@ function bindItemSection(kind, items, projectId) {
           <input class="edit-input edit-link" id="ed-link" value="${escapeHtml(item.link || "")}"
             placeholder="Link (optional)" maxlength="300" />
         </div>
+        ${kind === "tasks" && state.people.length ? `
+        <div class="editor-people">
+          ${state.people.map((per) => `
+            <button class="people-pick ${editPeople.has(per.id) ? "active" : ""}" data-edper="${per.id}" style="--pc:${per.color}">
+              <span class="pchip" style="--pc:${per.color}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>${escapeHtml(per.name)}
+            </button>
+          `).join("")}
+        </div>` : ""}
         <div class="editor-actions">
           <button class="btn btn-ghost btn-sm editor-note-btn" data-ed-note>${NOTE_SVG} ${item.note ? "Open doc" : "Add doc"}</button>
           <span class="editor-spacer"></span>
@@ -1788,6 +2097,16 @@ function bindItemSection(kind, items, projectId) {
       });
     });
 
+    // people connections: toggle on/off
+    li.querySelectorAll("[data-edper]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const pid = btn.dataset.edper;
+        if (editPeople.has(pid)) editPeople.delete(pid);
+        else editPeople.add(pid);
+        btn.classList.toggle("active", editPeople.has(pid));
+      });
+    });
+
     function save() {
       const text = textInput.value.trim();
       if (text) item.text = text;
@@ -1795,6 +2114,8 @@ function bindItemSection(kind, items, projectId) {
       const url = linkInput.value.trim();
       if (!url) delete item.link;
       else item.link = /^https?:\/\//i.test(url) ? url : "https://" + url;
+      if (editPeople.size) item.people = [...editPeople];
+      else delete item.people;
       persist();
       rerender();
     }
@@ -1841,6 +2162,12 @@ function bindItemSection(kind, items, projectId) {
     li.querySelectorAll("[data-notebtn]").forEach((b) =>
       b.addEventListener("click", () => {
         window.location.hash = `#/n/${projectId}/${kind}/${item.id}`;
+      })
+    );
+    li.querySelectorAll("[data-pchip]").forEach((b) =>
+      b.addEventListener("click", () => {
+        selectedPersonId = b.dataset.pchip;
+        window.location.hash = "#/people";
       })
     );
   });
