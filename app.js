@@ -1966,11 +1966,8 @@ function wireWindow(id) {
 }
 
 /* Builds the HTML for a checkable list panel (goals or tasks) */
-function sectionHtml(kind, label, items, placeholder) {
-  const doneCount = items.filter((i) => i.done).length;
-  const rows = items
-    .map(
-      (item) => `
+function itemRowHtml(item) {
+  return `
       <li class="item ${item.done ? "done" : ""}" data-id="${item.id}">
         <button class="item-check" data-toggle title="Toggle">${CHECK_SVG}</button>
         <span class="item-text" data-edit title="Click to edit">
@@ -1984,9 +1981,18 @@ function sectionHtml(kind, label, items, placeholder) {
         <span class="item-actions">
           <button class="action-btn item-delete" data-delete title="Delete">&times;</button>
         </span>
-      </li>`
-    )
-    .join("");
+      </li>`;
+}
+
+function elFromHtml(html) {
+  const t = document.createElement("template");
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+}
+
+function sectionHtml(kind, label, items, placeholder) {
+  const doneCount = items.filter((i) => i.done).length;
+  const rows = items.map(itemRowHtml).join("");
 
   // all four tags live on tasks; goals have none
   const tagButtons = kind === "tasks"
@@ -2028,18 +2034,40 @@ function bindItemSection(kind, items, projectId) {
     });
   });
 
-  function rerender() {
-    renderDesktop(projectId);
-    const el = app.querySelector(`[data-section="${kind}"] [data-add-input]`);
-    if (el) el.focus();
+  const list = section.querySelector(".item-list");
+
+  function updateCount() {
+    const count = section.querySelector(".section-count");
+    if (count) {
+      const doneCount = items.filter((i) => i.done).length;
+      count.textContent = items.length ? `${doneCount} / ${items.length}` : "";
+    }
+  }
+
+  /* swap one row for a fresh render of itself — no page flash */
+  function refreshRow(li, item) {
+    const fresh = elFromHtml(itemRowHtml(item));
+    li.replaceWith(fresh);
+    wireItem(fresh, item);
+    updateCount();
   }
 
   function add() {
     const text = input.value.trim();
     if (!text) return;
-    items.push({ id: uid(), text, done: false, tag: selectedTag });
+    const item = { id: uid(), text, done: false, tag: selectedTag };
+    items.push(item);
     persist();
-    rerender();
+
+    // insert in place — no re-render, no flash
+    const li = elFromHtml(itemRowHtml(item));
+    list.appendChild(li);
+    wireItem(li, item);
+    updateCount();
+    const hint = section.querySelector(".empty-hint");
+    if (hint) hint.remove();
+    input.value = "";
+    input.focus();
   }
 
   section.querySelector("[data-add-btn]").addEventListener("click", add);
@@ -2065,14 +2093,17 @@ function bindItemSection(kind, items, projectId) {
           <input class="edit-input edit-link" id="ed-link" value="${escapeHtml(item.link || "")}"
             placeholder="Link (optional)" maxlength="300" />
         </div>
-        ${kind === "tasks" && state.people.length ? `
+        ${kind !== "tasks" ? "" : state.people.length ? `
         <div class="editor-people">
           ${state.people.map((per) => `
             <button class="people-pick ${editPeople.has(per.id) ? "active" : ""}" data-edper="${per.id}" style="--pc:${per.color}">
               <span class="pchip" style="--pc:${per.color}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>${escapeHtml(per.name)}
             </button>
           `).join("")}
-        </div>` : ""}
+        </div>` : `
+        <div class="editor-people">
+          <button class="people-pick" data-ed-gopeople>+ Connect people — add them on the People page first</button>
+        </div>`}
         <div class="editor-actions">
           <button class="btn btn-ghost btn-sm editor-note-btn" data-ed-note>${NOTE_SVG} ${item.note ? "Open doc" : "Add doc"}</button>
           <span class="editor-spacer"></span>
@@ -2107,7 +2138,7 @@ function bindItemSection(kind, items, projectId) {
       });
     });
 
-    function save() {
+    function applyEdits() {
       const text = textInput.value.trim();
       if (text) item.text = text;
       item.tag = editTag;
@@ -2117,46 +2148,44 @@ function bindItemSection(kind, items, projectId) {
       if (editPeople.size) item.people = [...editPeople];
       else delete item.people;
       persist();
-      rerender();
+    }
+
+    function save() {
+      applyEdits();
+      refreshRow(li, item); // only this row updates
     }
 
     li.querySelector("[data-ed-save]").addEventListener("click", save);
-    li.querySelector("[data-ed-cancel]").addEventListener("click", rerender);
+    li.querySelector("[data-ed-cancel]").addEventListener("click", () => refreshRow(li, item));
     li.querySelector("[data-ed-note]").addEventListener("click", () => {
-      // keep whatever was typed, then jump into the doc
-      const text = textInput.value.trim();
-      if (text) item.text = text;
-      item.tag = editTag;
-      const url = linkInput.value.trim();
-      if (!url) delete item.link;
-      else item.link = /^https?:\/\//i.test(url) ? url : "https://" + url;
-      persist();
+      applyEdits(); // keep whatever was typed, then jump into the doc
       window.location.hash = `#/n/${projectId}/${kind}/${item.id}`;
+    });
+    const goPeople = li.querySelector("[data-ed-gopeople]");
+    if (goPeople) goPeople.addEventListener("click", () => {
+      applyEdits();
+      window.location.hash = "#/people";
     });
     li.addEventListener("keydown", (e) => {
       if (e.key === "Enter") save();
-      if (e.key === "Escape") rerender();
+      if (e.key === "Escape") refreshRow(li, item);
     });
   }
 
-  section.querySelectorAll(".item").forEach((li) => {
-    const item = items.find((i) => i.id === li.dataset.id);
+  function wireItem(li, item) {
     // completing is seamless: no re-render, just animate the state in place
     li.querySelector("[data-toggle]").addEventListener("click", () => {
       item.done = !item.done;
       persist();
       li.classList.toggle("done", item.done);
-      const count = section.querySelector(".section-count");
-      if (count) {
-        const doneCount = items.filter((i) => i.done).length;
-        count.textContent = items.length ? `${doneCount} / ${items.length}` : "";
-      }
+      updateCount();
     });
     li.querySelector("[data-delete]").addEventListener("click", () => {
-      const idx = items.findIndex((i) => i.id === li.dataset.id);
+      const idx = items.findIndex((i) => i.id === item.id);
       items.splice(idx, 1);
       persist();
-      rerender();
+      li.remove(); // in place, no flash
+      updateCount();
     });
     li.querySelector("[data-edit]").addEventListener("click", () => startEdit(li, item));
     li.querySelectorAll("[data-notebtn]").forEach((b) =>
@@ -2170,5 +2199,10 @@ function bindItemSection(kind, items, projectId) {
         window.location.hash = "#/people";
       })
     );
+  }
+
+  section.querySelectorAll(".item").forEach((li) => {
+    const item = items.find((i) => i.id === li.dataset.id);
+    wireItem(li, item);
   });
 }
