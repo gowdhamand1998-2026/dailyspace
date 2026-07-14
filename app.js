@@ -117,15 +117,15 @@ const WIDGET_ICONS = {
   phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>',
   book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>',
   bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4.2 12.6c.7.55 1.2 1.35 1.2 2.24V18h6v-1.16c0-.89.5-1.69 1.2-2.24A7 7 0 0 0 12 2z"/></svg>',
-  pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  pentool: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><circle cx="11" cy="11" r="2"/></svg>',
 };
 
 /* source: which list inside a project the widget collects from */
 const WIDGETS = {
   call: { icon: WIDGET_ICONS.phone, tint: "#4ade80", source: "tasks", label: "Calls", title: "People to call", empty: "No calls on your list. Tag a task with the phone icon when adding it." },
   read: { icon: WIDGET_ICONS.book, tint: "#60a5fa", source: "tasks", label: "Reading", title: "Things to read", empty: "Nothing to read yet. Tag a task with the book icon when adding it." },
-  think: { icon: WIDGET_ICONS.bulb, tint: "#fbbf24", source: "tasks", label: "Thinking", title: "Things to think through", empty: "Nothing to think through yet. Tag a task with the bulb icon when adding it." },
-  write: { icon: WIDGET_ICONS.pen, tint: "#c084fc", source: "tasks", label: "Writing", title: "Things to write", empty: "Nothing to write yet. Tag a task with the pen icon when adding it." },
+  think: { icon: WIDGET_ICONS.bulb, tint: "#fbbf24", source: "tasks", label: "Think & Write", title: "Things to think through & write", empty: "Nothing here yet. Tag a task with the bulb icon when adding it." },
+  sign: { icon: WIDGET_ICONS.pentool, tint: "#c084fc", source: "tasks", label: "Signatures", title: "Things to sign", empty: "Nothing to sign. Tag a task with the pen icon when adding it." },
 };
 
 /* fills in any fields older / imported data might be missing */
@@ -141,7 +141,17 @@ function ensureDefaults(s) {
   if (!s.widgets.call) s.widgets.call = { x: 92, y: 9 };
   if (!s.widgets.read) s.widgets.read = { x: 92, y: 30 };
   if (!s.widgets.think) s.widgets.think = { x: 92, y: 51 };
-  if (!s.widgets.write) s.widgets.write = { x: 92, y: 72 };
+  // "write" merged into "think"; its old slot becomes "sign"
+  if (s.widgets.write) {
+    if (!s.widgets.sign) s.widgets.sign = s.widgets.write;
+    delete s.widgets.write;
+    s.projects.forEach((p) =>
+      [...(p.tasks || []), ...(p.goals || [])].forEach((t) => {
+        if (t.tag === "write") t.tag = "think";
+      })
+    );
+  }
+  if (!s.widgets.sign) s.widgets.sign = { x: 92, y: 72 };
   if (!s.links) s.links = [];
   if (!s.collections) s.collections = [];
   if (!s.archived) s.archived = [];
@@ -502,7 +512,7 @@ function route() {
   // locked until the password is entered
   if (db && !cloud.user) { renderGate(); return; }
 
-  const wMatch = window.location.hash.match(/^#\/w\/(call|read|think|write)$/);
+  const wMatch = window.location.hash.match(/^#\/w\/(call|read|think|sign)$/);
   if (wMatch) { renderDesktop(null, wMatch[1]); return; }
 
   // full-page note for a task/goal
