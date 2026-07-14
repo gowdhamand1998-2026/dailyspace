@@ -144,6 +144,8 @@ function ensureDefaults(s) {
   if (!s.widgets.write) s.widgets.write = { x: 92, y: 72 };
   if (!s.links) s.links = [];
   if (!s.collections) s.collections = [];
+  if (!s.archived) s.archived = [];
+  if (!s.archivePos) s.archivePos = { x: 92, y: 84 };
   if (!s.period) s.period = "day";
   if (s.timebarHidden === undefined) s.timebarHidden = false;
   return s;
@@ -371,6 +373,9 @@ window.faviconNext = function (img) {
   }
 };
 
+const NOTE_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>';
+
 const CHECK_SVG =
   '<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6.5L4.5 9L10 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -379,6 +384,7 @@ const ICONS = {
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 007.07 0l2.83-2.83a5 5 0 00-7.07-7.07L11 5.93"/><path d="M14 10a5 5 0 00-7.07 0l-2.83 2.83a5 5 0 007.07 7.07L13 18.07"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>',
+  archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>',
 };
 
 function initials(name) {
@@ -496,6 +502,16 @@ function route() {
   const wMatch = window.location.hash.match(/^#\/w\/(call|read|think|write)$/);
   if (wMatch) { renderDesktop(null, wMatch[1]); return; }
 
+  // full-page note for a task/goal
+  const nMatch = window.location.hash.match(/^#\/n\/([^/]+)\/(goals|tasks)\/(.+)$/);
+  if (nMatch) {
+    const np = getProject(nMatch[1]);
+    const nItem = np && np[nMatch[2]].find((i) => i.id === nMatch[3]);
+    if (nItem) { renderNotePage(nMatch[1], nMatch[2], nMatch[3]); return; }
+  }
+
+  if (window.location.hash === "#/a") { renderDesktop(null, null, null, true); return; }
+
   const cMatch = window.location.hash.match(/^#\/c\/(.+)$/);
   if (cMatch && state.collections.find((c) => c.id === cMatch[1])) {
     renderDesktop(null, null, cMatch[1]);
@@ -518,6 +534,7 @@ function taggedTasks(tag) {
   const source = WIDGETS[tag].source; // "tasks" or "goals"
   const out = [];
   state.projects.forEach((p) => {
+    if (isArchived("project", p.id)) return; // archived projects rest quietly
     p[source].forEach((t) => { if (t.tag === tag) out.push({ task: t, project: p }); });
   });
   return out;
@@ -526,6 +543,15 @@ function taggedTasks(tag) {
 /* is a project/link tucked inside some collection? */
 function inCollection(type, id) {
   return state.collections.some((c) => c.items.some((i) => i.type === type && i.id === id));
+}
+
+function isArchived(type, id) {
+  return state.archived.some((a) => a.type === type && a.id === id);
+}
+
+/* hidden from desktop = in a collection OR archived */
+function onDesktop(type, id) {
+  return !inCollection(type, id) && !isArchived(type, id);
 }
 
 /* iOS-folder-style mini preview: up to 4 tiles of what's inside */
@@ -543,7 +569,7 @@ function collectionPreview(c) {
   }).join("");
 }
 
-function renderDesktop(openId, widgetKind, collectionId) {
+function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
   const widgets = Object.entries(WIDGETS)
     .map(([kind, w]) => {
       const pending = taggedTasks(kind).filter((x) => !x.task.done).length;
@@ -559,7 +585,7 @@ function renderDesktop(openId, widgetKind, collectionId) {
     .join("");
 
   const icons = state.projects
-    .filter((p) => !inCollection("project", p.id))
+    .filter((p) => onDesktop("project", p.id))
     .map((p) => {
       const total = p.tasks.length;
       const done = p.tasks.filter((t) => t.done).length;
@@ -614,12 +640,18 @@ function renderDesktop(openId, widgetKind, collectionId) {
       <div class="desktop-items ${state.timebarHidden ? "" : "with-timebar"}" data-items>
       ${icons}
       ${widgets}
-      ${state.collections.map((c) => `
+      ${state.collections.filter((c) => !isArchived("collection", c.id)).map((c) => `
         <div class="collection" data-collection="${c.id}" style="left:${c.pos.x}%; top:${c.pos.y}%">
           <div class="collection-tile">${collectionPreview(c)}</div>
           <div class="icon-label">${escapeHtml(c.name)}</div>
         </div>`).join("")}
-      ${state.links.filter((l) => !inCollection("link", l.id)).map((l) => `
+      <div class="widget archive-obj" data-archive style="left:${state.archivePos.x}%; top:${state.archivePos.y}%">
+        <div class="widget-tile archive-tile">${ICONS.archive}
+          ${state.archived.length ? `<span class="archive-count">${state.archived.length}</span>` : ""}
+        </div>
+        <div class="icon-label">Archive</div>
+      </div>
+      ${state.links.filter((l) => onDesktop("link", l.id)).map((l) => `
         <div class="linkicon" data-link="${l.id}" style="left:${l.pos.x}%; top:${l.pos.y}%">
           <div class="linkicon-tile">
             <img src="${linkIconSrc(l.url)}"
@@ -648,12 +680,14 @@ function renderDesktop(openId, widgetKind, collectionId) {
     ${openId ? windowHtml(openId) : ""}
     ${widgetKind ? widgetWindowHtml(widgetKind) : ""}
     ${collectionId ? collectionHtml(collectionId) : ""}
+    ${archiveOpen ? archiveHtml() : ""}
   `;
 
   wireDesktop();
   if (openId) wireWindow(openId);
   if (widgetKind) wireWidgetWindow(widgetKind);
   if (collectionId) wireCollection(collectionId);
+  if (archiveOpen) wireArchive();
 }
 
 function wireDesktop() {
@@ -737,6 +771,16 @@ function wireDesktop() {
   /* dropping one icon onto another groups them into a collection (iOS-style);
      dropping onto an existing collection adds to it */
   function dropGroup(targetEl, type, id) {
+    // anything dropped on the archive box gets archived
+    if (targetEl.dataset.archive !== undefined) {
+      state.archived.push({ type, id });
+      persist();
+      renderDesktop(null);
+      return true;
+    }
+    // collections themselves can only be archived, not nested
+    if (type === "collection") return false;
+
     if (targetEl.dataset.collection) {
       const c = state.collections.find((x) => x.id === targetEl.dataset.collection);
       c.items.push({ type, id });
@@ -780,7 +824,7 @@ function wireDesktop() {
       function findTarget(x, y) {
         const stack = document.elementsFromPoint(x, y);
         const under = stack.find((node) => !el.contains(node) && node !== el);
-        const t = under && under.closest("[data-icon],[data-link],[data-collection]");
+        const t = under && under.closest("[data-icon],[data-link],[data-collection],[data-archive]");
         return t && t !== el ? t : null;
       }
 
@@ -841,12 +885,20 @@ function wireDesktop() {
     });
   });
 
-  // collections
+  // collections (draggable; can be dropped onto the archive)
   app.querySelectorAll("[data-collection]").forEach((el) => {
     const c = state.collections.find((x) => x.id === el.dataset.collection);
     draggable(el, c.pos, {
       onOpen: () => (window.location.hash = "#/c/" + c.id),
+      groupType: "collection",
+      groupId: c.id,
     });
+  });
+
+  // the archive box itself
+  const archiveEl = app.querySelector("[data-archive]");
+  if (archiveEl) draggable(archiveEl, state.archivePos, {
+    onOpen: () => (window.location.hash = "#/a"),
   });
 
   // web links: drag to move (or group), click to confirm & open
@@ -1049,6 +1101,7 @@ function showOpenLinkModal(link) {
       state.collections.forEach((c) => {
         c.items = c.items.filter((i) => !(i.type === "link" && i.id === link.id));
       });
+      state.archived = state.archived.filter((a) => !(a.type === "link" && a.id === link.id));
       persist();
       close();
       route();
@@ -1067,9 +1120,9 @@ function showOpenLinkModal(link) {
 /* everything still sitting loose on the desktop */
 function availableItems() {
   return [
-    ...state.projects.filter((p) => !inCollection("project", p.id))
+    ...state.projects.filter((p) => onDesktop("project", p.id))
       .map((p) => ({ type: "project", id: p.id })),
-    ...state.links.filter((l) => !inCollection("link", l.id))
+    ...state.links.filter((l) => onDesktop("link", l.id))
       .map((l) => ({ type: "link", id: l.id })),
   ];
 }
@@ -1085,6 +1138,15 @@ function rowThumb(it) {
       thumb: `<span class="crow-thumb" style="--pa:${accentFor(p.id)}">${initials(p.name)}</span>`,
     };
   }
+  if (it.type === "collection") {
+    const c = state.collections.find((x) => x.id === it.id);
+    if (!c) return null;
+    return {
+      name: c.name,
+      kind: "Collection",
+      thumb: `<span class="crow-thumb crow-collthumb">${ICONS.shuffle}</span>`,
+    };
+  }
   const l = state.links.find((x) => x.id === it.id);
   if (!l) return null;
   return {
@@ -1092,6 +1154,126 @@ function rowThumb(it) {
     kind: "Link",
     thumb: `<span class="crow-thumb crow-linkthumb"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>`,
   };
+}
+
+/* ---------- full-page note for a task/goal ---------- */
+
+function renderNotePage(pid, kind, itemId) {
+  const p = getProject(pid);
+  const item = p[kind].find((i) => i.id === itemId);
+  const accent = accentFor(pid);
+
+  app.innerHTML = `
+    <div class="notepage" style="--pa:${accent}">
+      <div class="notepage-bar">
+        <button class="back-btn" data-back>&larr; ${escapeHtml(p.name)}</button>
+        <div class="note-tools">
+          <button class="tool-btn" data-cmd="h2" title="Heading">H</button>
+          <button class="tool-btn" data-cmd="ul" title="Bullet list">&bull; List</button>
+          <button class="tool-btn" data-cmd="p" title="Plain text">Text</button>
+        </div>
+        <span class="save-hint" id="note-hint">&nbsp;</span>
+      </div>
+      <div class="notepage-inner">
+        <input class="note-title" id="note-title" value="${escapeHtml(item.text)}" maxlength="200" />
+        <div class="note-editor" id="note-editor" contenteditable="true"></div>
+      </div>
+    </div>
+  `;
+
+  const editor = document.getElementById("note-editor");
+  editor.innerHTML = item.note || "";
+
+  function back() { window.location.hash = "#/p/" + pid; }
+  app.querySelector("[data-back]").addEventListener("click", back);
+  document.addEventListener("keydown", function esc(e) {
+    if (e.key === "Escape") { back(); document.removeEventListener("keydown", esc); }
+  });
+
+  // the page title IS the task text
+  const titleInput = document.getElementById("note-title");
+  titleInput.addEventListener("blur", () => {
+    const v = titleInput.value.trim();
+    if (v) item.text = v;
+    persist();
+  });
+  titleInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); editor.focus(); }
+  });
+
+  // formatting toolbar
+  app.querySelectorAll("[data-cmd]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      editor.focus();
+      const cmd = btn.dataset.cmd;
+      if (cmd === "h2") document.execCommand("formatBlock", false, "<h2>");
+      else if (cmd === "ul") document.execCommand("insertUnorderedList");
+      else document.execCommand("formatBlock", false, "<p>");
+    });
+  });
+
+  // autosave (debounced)
+  const hint = document.getElementById("note-hint");
+  let timer = null;
+  editor.addEventListener("input", () => {
+    clearTimeout(timer);
+    hint.textContent = "typing…";
+    timer = setTimeout(() => {
+      item.note = editor.textContent.trim() ? editor.innerHTML : "";
+      persist();
+      hint.textContent = "saved";
+      setTimeout(() => (hint.innerHTML = "&nbsp;"), 1500);
+    }, 500);
+  });
+}
+
+/* ---------- archive panel ---------- */
+
+function archiveHtml() {
+  const rows = state.archived.map((it, idx) => {
+    const t = rowThumb(it);
+    if (!t) return "";
+    return `
+      <div class="crow crow-static">
+        ${t.thumb}
+        <span class="crow-name">${escapeHtml(t.name)}</span>
+        <span class="crow-kind">${t.kind}</span>
+        <button class="btn btn-ghost btn-sm" data-restore="${idx}">Restore</button>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="window-backdrop" data-backdrop>
+      <div class="collection-panel">
+        <button class="panel-close" data-panel-close title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <div class="picker-heading">Archive</div>
+        <div class="collection-list">
+          ${rows || `<div class="empty-hint picker-empty">Nothing archived. Drag any project, link, or collection onto the archive box.</div>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function wireArchive() {
+  const backdrop = app.querySelector("[data-backdrop]");
+
+  function close() { window.location.hash = "#/"; }
+  backdrop.querySelector("[data-panel-close]").addEventListener("click", close);
+  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  document.addEventListener("keydown", function esc(e) {
+    if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); }
+  });
+
+  backdrop.querySelectorAll("[data-restore]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.archived.splice(+btn.dataset.restore, 1);
+      persist();
+      renderDesktop(null, null, null, true);
+    });
+  });
 }
 
 /* one visual modal for both flows:
@@ -1225,6 +1407,7 @@ function collectionHtml(id) {
           ${!cells && !addTile ? `<div class="empty-hint picker-empty">This collection is empty.</div>` : ""}
         </div>
         <div class="collection-footer">
+          <button class="btn btn-ghost" id="col-archive">Archive</button>
           <button class="btn btn-danger" id="col-delete">Delete collection</button>
         </div>
       </div>
@@ -1277,10 +1460,18 @@ function wireCollection(id) {
   const addOpen = backdrop.querySelector("[data-cadd-open]");
   if (addOpen) addOpen.addEventListener("click", () => showCollectionComposer(c));
 
+  // archive the whole collection
+  backdrop.querySelector("#col-archive").addEventListener("click", () => {
+    state.archived.push({ type: "collection", id });
+    persist();
+    close();
+  });
+
   // delete the collection; its contents return to the desktop
   backdrop.querySelector("#col-delete").addEventListener("click", () => {
     if (confirm(`Delete "${c.name}"? Its contents go back to the desktop.`)) {
       state.collections = state.collections.filter((x) => x.id !== id);
+      state.archived = state.archived.filter((a) => !(a.type === "collection" && a.id === id));
       persist();
       close();
     }
@@ -1386,6 +1577,7 @@ function windowHtml(id) {
           </div>
 
           <div class="danger-row">
+            <button class="btn btn-ghost" id="pj-archive">Archive</button>
             <button class="btn btn-danger" id="pj-delete">Delete project</button>
           </div>
         </div>
@@ -1446,12 +1638,19 @@ function wireWindow(id) {
   bindItemSection("goals", p.goals, id);
   bindItemSection("tasks", p.tasks, id);
 
+  backdrop.querySelector("#pj-archive").addEventListener("click", () => {
+    state.archived.push({ type: "project", id });
+    persist();
+    window.location.hash = "#/";
+  });
+
   backdrop.querySelector("#pj-delete").addEventListener("click", () => {
     if (confirm(`Delete "${p.name}"? This cannot be undone.`)) {
       state.projects = state.projects.filter((x) => x.id !== id);
       state.collections.forEach((c) => {
         c.items = c.items.filter((i) => !(i.type === "project" && i.id === id));
       });
+      state.archived = state.archived.filter((a) => !(a.type === "project" && a.id === id));
       selectedId = null;
       persist();
       window.location.hash = "#/";
@@ -1480,6 +1679,8 @@ function sectionHtml(kind, label, items, placeholder) {
           ${item.tag ? `<span class="item-tag" style="--wt:${WIDGETS[item.tag].tint}" title="${WIDGETS[item.tag].label}">${WIDGETS[item.tag].icon}</span>` : ""}${escapeHtml(item.text)}
         </span>
         ${item.link ? `<a class="item-link" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" title="${escapeHtml(item.link)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>` : ""}
+        <button class="item-notebtn ${item.note ? "has-note" : ""}" data-notebtn
+          title="${item.note ? "Open note" : "Add a note"}">${NOTE_SVG}</button>
         <button class="item-delete" data-delete title="Delete">&times;</button>
       </li>`
     )
@@ -1616,5 +1817,8 @@ function bindItemSection(kind, items, projectId) {
       rerender();
     });
     li.querySelector("[data-edit]").addEventListener("click", () => startEdit(li, item));
+    li.querySelector("[data-notebtn]").addEventListener("click", () => {
+      window.location.hash = `#/n/${projectId}/${kind}/${item.id}`;
+    });
   });
 }

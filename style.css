@@ -568,6 +568,150 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   white-space: nowrap;
 }
 
+/* ---------- archive box ---------- */
+
+.archive-tile { position: relative; }
+.archive-tile > svg {
+  width: 26px;
+  height: 26px;
+  color: var(--text-2);
+  filter: none;
+}
+.archive-obj:hover .archive-tile > svg { color: var(--text); }
+
+.archive-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(70, 71, 78, 0.95);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.crow-collthumb { background: rgba(255, 255, 255, 0.09); }
+.crow-collthumb svg { width: 16px; height: 16px; color: var(--text-2); }
+
+.crow-static { cursor: default; }
+.crow-static .btn-sm { flex-shrink: 0; }
+
+/* ---------- note page ---------- */
+
+.notepage {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(50% 40% at 80% 0%, color-mix(in srgb, var(--pa, #888) 14%, transparent), transparent),
+    linear-gradient(165deg, #17181d 0%, #0e0e11 55%, #0a0a0c 100%);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  animation: fade 0.2s var(--ease) both;
+}
+
+.notepage-bar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 22px;
+  background: rgba(14, 14, 17, 0.6);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-bottom: 1px solid var(--line);
+  z-index: 2;
+}
+
+.back-btn {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  transition: color 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.back-btn:hover { color: var(--text); }
+
+.note-tools { display: flex; gap: 4px; flex: 1; justify-content: center; }
+
+.tool-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  transition: color 0.15s, background 0.15s;
+}
+.tool-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.1); }
+
+.notepage-inner {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 44px 28px 120px;
+  user-select: text;
+}
+
+.note-title {
+  background: transparent;
+  border: none;
+  font-size: clamp(26px, 4vw, 36px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #fff;
+  padding: 0;
+  margin-bottom: 22px;
+  border-radius: 0;
+}
+.note-title:focus { border: none; box-shadow: none; background: transparent; }
+
+.note-editor {
+  min-height: 55vh;
+  outline: none;
+  font-size: 15.5px;
+  line-height: 1.8;
+  color: var(--text);
+}
+.note-editor:empty::before {
+  content: "Write here — use the toolbar for headings and bullet points.";
+  color: var(--text-3);
+  pointer-events: none;
+}
+.note-editor h2 {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 22px 0 8px;
+}
+.note-editor ul { padding-left: 24px; margin: 8px 0; }
+.note-editor li { margin: 4px 0; }
+.note-editor p { margin: 8px 0; }
+
+/* note button on task rows */
+.item-notebtn {
+  flex-shrink: 0;
+  color: var(--text-3);
+  padding: 2px 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.item:hover .item-notebtn { opacity: 1; }
+.item-notebtn:hover { color: var(--text); }
+.item-notebtn.has-note { opacity: 1; color: #fbbf24; }
+.item-notebtn svg { width: 13px; height: 13px; }
+
 /* ---------- collections (iOS-folder style) ---------- */
 
 .collection {
@@ -1374,8 +1518,11 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .danger-row {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   padding-top: 4px;
 }
+
+.collection-footer { gap: 8px; }
 
 .empty-hint { color: var(--text-3); font-size: 13.5px; }
 
