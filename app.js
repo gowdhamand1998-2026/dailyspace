@@ -300,8 +300,6 @@ function renderGate(message) {
 }
 
 let selectedId = null;
-let winMax = false;       // is the open window full screen?
-let minimizedId = null;   // project whose window is minimized to the dock
 
 function persist() {
   Store.save(state);      // instant local save
@@ -535,10 +533,9 @@ function route() {
   }
 
   const match = window.location.hash.match(/^#\/p\/(.+)$/);
-  const openId = match && getProject(match[1]) ? match[1] : null;
-  if (openId && minimizedId === openId) minimizedId = null; // restoring from dock
-  if (!openId && !minimizedId) winMax = false; // closed for real → forget full screen
-  renderDesktop(openId);
+  if (match && getProject(match[1])) { renderProjectPage(match[1]); return; }
+
+  renderDesktop(null);
 }
 
 window.addEventListener("hashchange", route);
@@ -736,21 +733,14 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
         <button class="dock-btn" data-tip="Archive" data-archive>${ICONS.archive}
           ${state.archived.length ? `<span class="archive-count">${state.archived.length}</span>` : ""}
         </button>
-        ${minimizedId && getProject(minimizedId) ? `
-        <div class="dock-sep"></div>
-        <button class="dock-btn" data-tip="${escapeHtml(getProject(minimizedId).name)}" data-dock-restore>
-          <div class="dock-min-thumb" style="--pa:${accentFor(minimizedId)}">${initials(getProject(minimizedId).name)}</div>
-        </button>` : ""}
       </div>
     </div>
-    ${openId ? windowHtml(openId) : ""}
     ${widgetKind ? widgetWindowHtml(widgetKind) : ""}
     ${collectionId ? collectionHtml(collectionId) : ""}
     ${archiveOpen ? archiveHtml() : ""}
   `;
 
   wireDesktop();
-  if (openId) wireWindow(openId);
   if (widgetKind) wireWidgetWindow(widgetKind);
   if (collectionId) wireCollection(collectionId);
   if (archiveOpen) wireArchive();
@@ -796,13 +786,6 @@ function wireDesktop() {
 
   // dock
   app.querySelector("[data-dock-add]").addEventListener("click", showAddChooser);
-  const restoreBtn = app.querySelector("[data-dock-restore]");
-  if (restoreBtn) restoreBtn.addEventListener("click", () => {
-    const id = minimizedId;
-    minimizedId = null;
-    if (window.location.hash === "#/p/" + id) route();
-    else window.location.hash = "#/p/" + id;
-  });
   app.querySelector("[data-dock-tidy]").addEventListener("click", () => {
     // compact grid computed in PIXELS from the real window size, then stored
     // as % — so icons never overlap on small screens and stay compact on big ones
@@ -2084,129 +2067,174 @@ function wireWidgetWindow(kind) {
 
 /* ---------- 4. PROJECT WINDOW ---------- */
 
-function windowHtml(id) {
+/* ---------- full-screen project page with tabs ---------- */
+
+let projTab = "notes";
+let projTabFor = null; // which project the remembered tab belongs to
+
+const PROJ_TABS = [
+  { key: "notes", label: "Notes" },
+  { key: "work", label: "Goals & Tasks" },
+  { key: "links", label: "Links" },
+];
+
+function renderProjectPage(id, tab) {
   const p = getProject(id);
   const accent = accentFor(id);
 
-  return `
-    <div class="window-backdrop ${winMax ? "maximized" : ""}" data-backdrop>
-      <div class="window" style="--pa:${accent}">
-        <div class="window-titlebar">
-          <div class="traffic">
-            <button class="t-close" data-close title="Close"></button>
-            <button class="t-min" data-minimize title="Minimize"></button>
-            <button class="t-max" data-maximize title="Full screen"></button>
-          </div>
-          <div class="window-title">${escapeHtml(p.name)}</div>
-          <div class="titlebar-actions">
-            <button class="tb-action" data-tb-archive title="Archive project">${ICONS.archive}</button>
-            <button class="tb-action tb-action-danger" data-tb-delete title="Delete project">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-            </button>
-          </div>
+  if (projTabFor !== id) { projTab = "notes"; projTabFor = id; } // fresh open → Notes
+  if (tab) projTab = tab;
+
+  let body = "";
+  if (projTab === "notes") {
+    const docs = [
+      ...p.tasks.filter((t) => t.note).map((t) => ({ item: t, kind: "tasks" })),
+      ...p.goals.filter((g) => g.note).map((g) => ({ item: g, kind: "goals" })),
+    ];
+    body = `
+      <div class="doc-feed">
+        <div class="panel panel-notes">
+          <div class="section-title">Project notes</div>
+          <textarea class="notes-area" id="pj-notes"
+            placeholder="Ideas, links, anything...">${escapeHtml(p.notes)}</textarea>
+          <div class="save-hint" id="save-hint">&nbsp;</div>
         </div>
-        <div class="window-body">
-          <div class="project-hero">
-            <input class="project-title" id="pj-name" value="${escapeHtml(p.name)}" maxlength="60" />
-            <textarea class="project-desc" id="pj-desc" rows="1"
-              placeholder="Add a short description...">${escapeHtml(p.description)}</textarea>
-          </div>
-
-          ${sectionHtml("goals", "Goals", p.goals, "Add a goal...")}
-          ${sectionHtml("tasks", "Tasks", p.tasks, "Add a task...")}
-
-          <div class="panel panel-notes">
-            <div class="section-title">Notes</div>
-            <textarea class="notes-area" id="pj-notes"
-              placeholder="Ideas, links, anything...">${escapeHtml(p.notes)}</textarea>
-            <div class="save-hint" id="save-hint">&nbsp;</div>
-          </div>
-
+        ${docs.map(({ item, kind }) => `
+          <article class="doc-block" data-opendoc="${kind}:${item.id}" title="Open in the editor">
+            <h3>${escapeHtml(item.text)}</h3>
+            <div class="doc-body">${item.note}</div>
+          </article>
+        `).join("")}
+        ${docs.length ? "" : `<div class="empty-hint picker-empty">No docs written yet — open a task's editor and hit "Add doc".</div>`}
+      </div>`;
+  } else if (projTab === "work") {
+    body = `
+      ${sectionHtml("goals", "Goals", p.goals, "Add a goal...")}
+      ${sectionHtml("tasks", "Tasks", p.tasks, "Add a task...")}`;
+  } else {
+    const linked = [...p.tasks, ...p.goals].filter((t) => t.link);
+    body = `
+      <div class="panel">
+        <div class="section-title">Links</div>
+        <div class="collection-list" style="padding-top:6px;">
+          ${linked.map((t) => {
+            let host = "";
+            try { host = new URL(t.link).hostname.replace(/^www\./, ""); } catch {}
+            return `
+              <a class="crow" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">
+                <span class="crow-thumb crow-linkthumb"><img src="${linkIconSrc(t.link)}" alt="" onerror="this.style.display='none'" /></span>
+                <span class="crow-name">${escapeHtml(t.text)}</span>
+                <span class="crow-kind">${escapeHtml(host)}</span>
+              </a>`;
+          }).join("")}
+          ${linked.length ? "" : `<div class="empty-hint picker-empty">No links yet — attach one from a task's editor.</div>`}
         </div>
+      </div>`;
+  }
+
+  app.innerHTML = `
+    <div class="projectpage" style="--pa:${accent}">
+      <div class="notepage-bar">
+        <button class="back-btn" data-back>&larr; Desktop</button>
+        <div class="proj-tabs">
+          ${PROJ_TABS.map((t) => `
+            <button class="proj-tab ${projTab === t.key ? "active" : ""}" data-ptab="${t.key}">${t.label}</button>
+          `).join("")}
+        </div>
+        <div class="titlebar-actions">
+          <button class="tb-action" data-tb-archive title="Archive project">${ICONS.archive}</button>
+          <button class="tb-action tb-action-danger" data-tb-delete title="Delete project">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="projectpage-inner">
+        <div class="project-hero">
+          <input class="project-title" id="pj-name" value="${escapeHtml(p.name)}" maxlength="60" />
+          <textarea class="project-desc" id="pj-desc" rows="1"
+            placeholder="Add a short description...">${escapeHtml(p.description)}</textarea>
+        </div>
+        ${body}
       </div>
     </div>
   `;
+
+  wireProjectPage(id);
 }
 
-function wireWindow(id) {
+function wireProjectPage(id) {
   const p = getProject(id);
-  const backdrop = app.querySelector("[data-backdrop]");
+  const page = app.querySelector(".projectpage");
 
-  function close() {
-    winMax = false;
-    minimizedId = null;
-    if (window.location.hash === "#/") route();
-    else window.location.hash = "#/";
-  }
-
-  backdrop.querySelector("[data-close]").addEventListener("click", close);
-
-  // yellow — minimize to the dock
-  backdrop.querySelector("[data-minimize]").addEventListener("click", () => {
-    minimizedId = id;
-    window.location.hash = "#/";
-  });
-
-  // green — toggle full screen
-  backdrop.querySelector("[data-maximize]").addEventListener("click", () => {
-    winMax = !winMax;
-    backdrop.classList.toggle("maximized", winMax);
-  });
-
-  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  app.querySelector("[data-back]").addEventListener("click", () => (window.location.hash = "#/"));
   document.addEventListener("keydown", function esc(e) {
-    if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); }
-  });
-
-  // Inline editing: save on blur / Enter
-  bindField("#pj-name", (v) => { p.name = v || p.name; });
-  bindField("#pj-desc", (v) => { p.description = v; });
-
-  // Notes autosave (debounced)
-  const notes = backdrop.querySelector("#pj-notes");
-  const hint = backdrop.querySelector("#save-hint");
-  let timer = null;
-  notes.addEventListener("input", () => {
-    clearTimeout(timer);
-    hint.textContent = "typing...";
-    timer = setTimeout(() => {
-      p.notes = notes.value;
-      persist();
-      hint.textContent = "saved";
-      setTimeout(() => (hint.innerHTML = "&nbsp;"), 1500);
-    }, 500);
-  });
-
-  bindItemSection("goals", p.goals, id);
-  bindItemSection("tasks", p.tasks, id);
-
-  backdrop.querySelector("[data-tb-archive]").addEventListener("click", () => {
-    state.archived.push({ type: "project", id });
-    persist();
-    window.location.hash = "#/";
-  });
-
-  backdrop.querySelector("[data-tb-delete]").addEventListener("click", () => {
-    if (confirm(`Delete "${p.name}"? This cannot be undone.`)) {
-      state.projects = state.projects.filter((x) => x.id !== id);
-      state.collections.forEach((c) => {
-        c.items = c.items.filter((i) => !(i.type === "project" && i.id === id));
-      });
-      state.archived = state.archived.filter((a) => !(a.type === "project" && a.id === id));
-      selectedId = null;
-      persist();
+    if (!app.querySelector(".projectpage")) { document.removeEventListener("keydown", esc); return; }
+    if (e.key === "Escape" && !e.target.closest("input, textarea, .item-editor")) {
+      document.removeEventListener("keydown", esc);
       window.location.hash = "#/";
     }
   });
 
+  // tabs
+  page.querySelectorAll("[data-ptab]").forEach((btn) => {
+    btn.addEventListener("click", () => renderProjectPage(id, btn.dataset.ptab));
+  });
+
+  // title / description
   function bindField(selector, apply) {
-    const el = backdrop.querySelector(selector);
+    const el = page.querySelector(selector);
     const save = () => { apply(el.value.trim()); persist(); };
     el.addEventListener("blur", save);
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && el.tagName !== "TEXTAREA") el.blur();
     });
   }
+  bindField("#pj-name", (v) => { p.name = v || p.name; });
+  bindField("#pj-desc", (v) => { p.description = v; });
+
+  // tab-specific wiring
+  if (projTab === "notes") {
+    const notes = page.querySelector("#pj-notes");
+    const hint = page.querySelector("#save-hint");
+    let timer = null;
+    notes.addEventListener("input", () => {
+      clearTimeout(timer);
+      hint.textContent = "typing...";
+      timer = setTimeout(() => {
+        p.notes = notes.value;
+        persist();
+        hint.textContent = "saved";
+        setTimeout(() => (hint.innerHTML = "&nbsp;"), 1500);
+      }, 500);
+    });
+    page.querySelectorAll("[data-opendoc]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const [kind, itemId] = el.dataset.opendoc.split(":");
+        window.location.hash = `#/n/${id}/${kind}/${itemId}`;
+      });
+    });
+  } else if (projTab === "work") {
+    bindItemSection("goals", p.goals, id);
+    bindItemSection("tasks", p.tasks, id);
+  }
+
+  // archive / delete
+  page.querySelector("[data-tb-archive]").addEventListener("click", () => {
+    state.archived.push({ type: "project", id });
+    persist();
+    window.location.hash = "#/";
+  });
+  page.querySelector("[data-tb-delete]").addEventListener("click", () => {
+    if (confirm(`Delete "${p.name}"? This cannot be undone.`)) {
+      state.projects = state.projects.filter((x) => x.id !== id);
+      state.collections.forEach((c) => {
+        c.items = c.items.filter((i) => !(i.type === "project" && i.id === id));
+      });
+      state.archived = state.archived.filter((a) => !(a.type === "project" && a.id === id));
+      persist();
+      window.location.hash = "#/";
+    }
+  });
 }
 
 /* Builds the HTML for a checkable list panel (goals or tasks) */

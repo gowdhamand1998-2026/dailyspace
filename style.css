@@ -698,6 +698,82 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .note-editor p { margin: 8px 0; }
 
 
+/* ---------- full-screen project page with tabs ---------- */
+
+.projectpage {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(50% 40% at 80% 0%, color-mix(in srgb, var(--pa, #888) 14%, transparent), transparent),
+    linear-gradient(165deg, #17181d 0%, #0e0e11 55%, #0a0a0c 100%);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  animation: fade 0.2s var(--ease) both;
+}
+
+.proj-tabs {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.proj-tab {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  padding: 6px 15px;
+  border-radius: 9px;
+  transition: color 0.15s, background 0.15s;
+}
+.proj-tab:hover { color: var(--text-2); }
+.proj-tab.active {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.projectpage-inner {
+  width: min(820px, 100%);
+  margin: 0 auto;
+  padding: 30px 24px 100px;
+  user-select: text;
+}
+
+/* the notes feed: every written doc, one after another */
+.doc-feed { display: flex; flex-direction: column; gap: 16px; }
+
+.doc-block {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 20px 22px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.doc-block:hover { border-color: var(--line-strong); background: rgba(255, 255, 255, 0.07); }
+
+.doc-block h3 {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-bottom: 10px;
+}
+
+.doc-body {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-2);
+  max-height: 320px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent);
+  mask-image: linear-gradient(to bottom, #000 82%, transparent);
+}
+.doc-body h2 { font-size: 15.5px; font-weight: 600; color: var(--text); margin: 14px 0 6px; }
+.doc-body ul { padding-left: 22px; margin: 6px 0; }
+.doc-body li { margin: 3px 0; }
+.doc-body p { margin: 6px 0; }
+
 /* ---------- people network page ---------- */
 
 .peoplepage {
