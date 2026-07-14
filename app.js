@@ -2104,6 +2104,52 @@ function noteCardHtml(n) {
 let projTab = "notes";
 let projTabFor = null; // which project the remembered tab belongs to
 
+/* content of the currently selected tab */
+function projTabBodyHtml(p) {
+  if (projTab === "notes") {
+    const docs = [
+      ...p.tasks.filter((t) => t.note).map((t) => ({ item: t, kind: "tasks" })),
+      ...p.goals.filter((g) => g.note).map((g) => ({ item: g, kind: "goals" })),
+    ];
+    return `
+      <div class="doc-feed">
+        <button class="crow crow-add note-add" data-add-note>+ Add a note</button>
+        <div id="notes-feed">
+          ${p.notesList.map((n) => noteCardHtml(n)).join("")}
+        </div>
+        ${docs.map(({ item, kind }) => `
+          <article class="doc-block" data-opendoc="${kind}:${item.id}" title="Open in the editor">
+            <h3>${escapeHtml(item.text)}</h3>
+            <div class="doc-body">${item.note}</div>
+          </article>
+        `).join("")}
+      </div>`;
+  }
+  if (projTab === "work") {
+    return `
+      ${sectionHtml("goals", "Goals", p.goals, "Add a goal...")}
+      ${sectionHtml("tasks", "Tasks", p.tasks, "Add a task...")}`;
+  }
+  const linked = [...p.tasks, ...p.goals].filter((t) => t.link);
+  return `
+    <div class="panel">
+      <div class="section-title">Links</div>
+      <div class="collection-list" style="padding-top:6px;">
+        ${linked.map((t) => {
+          let host = "";
+          try { host = new URL(t.link).hostname.replace(/^www\./, ""); } catch {}
+          return `
+            <a class="crow" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">
+              <span class="crow-thumb crow-linkthumb"><img src="${linkIconSrc(t.link)}" alt="" onerror="this.style.display='none'" /></span>
+              <span class="crow-name">${escapeHtml(t.text)}</span>
+              <span class="crow-kind">${escapeHtml(host)}</span>
+            </a>`;
+        }).join("")}
+        ${linked.length ? "" : `<div class="empty-hint picker-empty">No links yet — attach one from a task's editor.</div>`}
+      </div>
+    </div>`;
+}
+
 const PROJ_TABS = [
   { key: "notes", label: "Notes" },
   { key: "work", label: "Goals & Tasks" },
@@ -2117,49 +2163,7 @@ function renderProjectPage(id, tab) {
   if (projTabFor !== id) { projTab = "notes"; projTabFor = id; } // fresh open → Notes
   if (tab) projTab = tab;
 
-  let body = "";
-  if (projTab === "notes") {
-    const docs = [
-      ...p.tasks.filter((t) => t.note).map((t) => ({ item: t, kind: "tasks" })),
-      ...p.goals.filter((g) => g.note).map((g) => ({ item: g, kind: "goals" })),
-    ];
-    body = `
-      <div class="doc-feed">
-        <button class="crow crow-add note-add" data-add-note>+ Add a note</button>
-        <div id="notes-feed">
-          ${p.notesList.map((n) => noteCardHtml(n)).join("")}
-        </div>
-        ${docs.map(({ item, kind }) => `
-          <article class="doc-block" data-opendoc="${kind}:${item.id}" title="Open in the editor">
-            <h3>${escapeHtml(item.text)}</h3>
-            <div class="doc-body">${item.note}</div>
-          </article>
-        `).join("")}
-      </div>`;
-  } else if (projTab === "work") {
-    body = `
-      ${sectionHtml("goals", "Goals", p.goals, "Add a goal...")}
-      ${sectionHtml("tasks", "Tasks", p.tasks, "Add a task...")}`;
-  } else {
-    const linked = [...p.tasks, ...p.goals].filter((t) => t.link);
-    body = `
-      <div class="panel">
-        <div class="section-title">Links</div>
-        <div class="collection-list" style="padding-top:6px;">
-          ${linked.map((t) => {
-            let host = "";
-            try { host = new URL(t.link).hostname.replace(/^www\./, ""); } catch {}
-            return `
-              <a class="crow" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">
-                <span class="crow-thumb crow-linkthumb"><img src="${linkIconSrc(t.link)}" alt="" onerror="this.style.display='none'" /></span>
-                <span class="crow-name">${escapeHtml(t.text)}</span>
-                <span class="crow-kind">${escapeHtml(host)}</span>
-              </a>`;
-          }).join("")}
-          ${linked.length ? "" : `<div class="empty-hint picker-empty">No links yet — attach one from a task's editor.</div>`}
-        </div>
-      </div>`;
-  }
+  const body = projTabBodyHtml(p);
 
   app.innerHTML = `
     <div class="projectpage" style="--pa:${accent}">
@@ -2200,12 +2204,24 @@ function wireProjectPage(id) {
     }
   });
 
-  // tabs
+  // tabs: swap only the content area — no page rebuild, subtle slide-in
   page.querySelectorAll("[data-ptab]").forEach((btn) => {
-    btn.addEventListener("click", () => renderProjectPage(id, btn.dataset.ptab));
+    btn.addEventListener("click", () => {
+      if (projTab === btn.dataset.ptab) return;
+      projTab = btn.dataset.ptab;
+      page.querySelectorAll("[data-ptab]").forEach((b) =>
+        b.classList.toggle("active", b.dataset.ptab === projTab)
+      );
+      const inner = page.querySelector(".projectpage-inner");
+      inner.innerHTML = projTabBodyHtml(p);
+      inner.classList.remove("tab-anim");
+      void inner.offsetWidth; // restart the entrance animation
+      inner.classList.add("tab-anim");
+      wireTabContent(id, page);
+    });
   });
 
-  // title / description
+  // title
   function bindField(selector, apply) {
     const el = page.querySelector(selector);
     const save = () => { apply(el.value.trim()); persist(); };
@@ -2216,7 +2232,31 @@ function wireProjectPage(id) {
   }
   bindField("#pj-name", (v) => { p.name = v || p.name; });
 
-  // tab-specific wiring
+  wireTabContent(id, page);
+
+  // archive / delete
+  page.querySelector("[data-tb-archive]").addEventListener("click", () => {
+    state.archived.push({ type: "project", id });
+    persist();
+    window.location.hash = "#/";
+  });
+  page.querySelector("[data-tb-delete]").addEventListener("click", () => {
+    if (confirm(`Delete "${p.name}"? This cannot be undone.`)) {
+      state.projects = state.projects.filter((x) => x.id !== id);
+      state.collections.forEach((c) => {
+        c.items = c.items.filter((i) => !(i.type === "project" && i.id === id));
+      });
+      state.archived = state.archived.filter((a) => !(a.type === "project" && a.id === id));
+      persist();
+      window.location.hash = "#/";
+    }
+  });
+}
+
+/* wiring for whatever tab is currently showing */
+function wireTabContent(id, page) {
+  const p = getProject(id);
+
   if (projTab === "notes") {
     const feed = page.querySelector("#notes-feed");
 
@@ -2277,24 +2317,6 @@ function wireProjectPage(id) {
     bindItemSection("goals", p.goals, id);
     bindItemSection("tasks", p.tasks, id);
   }
-
-  // archive / delete
-  page.querySelector("[data-tb-archive]").addEventListener("click", () => {
-    state.archived.push({ type: "project", id });
-    persist();
-    window.location.hash = "#/";
-  });
-  page.querySelector("[data-tb-delete]").addEventListener("click", () => {
-    if (confirm(`Delete "${p.name}"? This cannot be undone.`)) {
-      state.projects = state.projects.filter((x) => x.id !== id);
-      state.collections.forEach((c) => {
-        c.items = c.items.filter((i) => !(i.type === "project" && i.id === id));
-      });
-      state.archived = state.archived.filter((a) => !(a.type === "project" && a.id === id));
-      persist();
-      window.location.hash = "#/";
-    }
-  });
 }
 
 /* Builds the HTML for a checkable list panel (goals or tasks) */
