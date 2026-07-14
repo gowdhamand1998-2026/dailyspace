@@ -2101,8 +2101,85 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); border: 3px solid transparent; background-clip: content-box; }
 
-@media (max-width: 560px) {
-  .icon { width: 96px; }
-  .icon-thumb { width: 62px; height: 50px; }
-  .window-body { padding: 22px 20px 26px; }
+/* ============================================================
+   Mobile — clean, compact, thumb-friendly
+   ============================================================ */
+@media (max-width: 700px) {
+  /* top bars: only the essentials */
+  .menubar { padding: 8px 14px; }
+  .menu-date { display: none; }
+  .sync-chip { font-size: 0; gap: 0; }        /* dot only */
+  .menubar-right { gap: 12px; }
+  .menu-sep:first-of-type { display: none; }
+
+  .timebar { padding: 7px 14px; gap: 10px; }
+  .tb-btn { padding: 3px 7px; font-size: 11px; }
+  .timebar-label { min-width: 0; font-size: 11px; }
+
+  /* icons: 4-column phone grid sizing */
+  .icon, .linkicon, .widget, .collection { width: 21vw; max-width: 86px; }
+  .icon-thumb { width: 58px; height: 46px; border-radius: 13px; }
+  .icon-thumb span { font-size: 15px; }
+  .collection-tile { width: 56px; height: 56px; border-radius: 15px; padding: 7px; gap: 4px; }
+  .widget-tile { width: 54px; height: 54px; border-radius: 16px; }
+  .widget-tile > svg { width: 22px; height: 22px; }
+  .linkicon-tile { width: 54px; height: 54px; border-radius: 16px; }
+  .linkicon-tile img { width: 26px; height: 26px; }
+  .icon-label { font-size: 11px; max-width: 100%; padding: 1px 6px; }
+
+  /* dock: tighter, still floating */
+  .dock { bottom: 12px; padding: 7px 9px; border-radius: 18px; }
+  .dock-btn { width: 42px; height: 42px; border-radius: 12px; }
+  .dock-btn svg { width: 19px; height: 19px; }
+
+  /* project page: bar wraps, tabs get their own centered row */
+  .notepage-bar { flex-wrap: wrap; row-gap: 8px; padding: 10px 14px; gap: 10px; }
+  .proj-name-bar { max-width: 130px; font-size: 13px; }
+  .proj-tabs {
+    position: static;
+    transform: none;
+    order: 5;
+    width: 100%;
+    justify-content: center;
+  }
+  .projectpage .titlebar-actions { margin-left: auto; }
+  .projectpage-inner { padding: 18px 14px 90px; }
+
+  .panel { padding: 14px; border-radius: 13px; }
+  .note-card { padding: 14px 16px 6px; }
+  .doc-block { padding: 16px; }
+
+  /* task editor rows wrap instead of squeezing */
+  .add-row { flex-wrap: wrap; }
+  .add-row input { min-width: 0; flex: 1 1 100%; }
+  .editor-row { flex-wrap: wrap; }
+  .editor-row .edit-link { flex: 1 1 100%; }
+  .editor-actions { flex-wrap: wrap; }
+
+  /* people page: panel becomes a bottom sheet */
+  .person-panel {
+    top: auto;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: auto;
+    max-height: 62vh;
+    animation: sheet-up 0.25s var(--ease) both;
+  }
+  .pnode-disc { width: 48px; height: 48px; font-size: 14px; }
+  .me-disc { width: 60px; height: 60px; font-size: 14px; }
+  .pnode-name { font-size: 11px; max-width: 80px; }
+
+  /* modals sit comfortably */
+  .window-backdrop { padding: 3vh 12px; align-items: flex-start; padding-top: 10vh; }
+  .collection-panel, .new-form { width: 100%; }
+
+  /* note page toolbar wraps */
+  .notepage-bar .note-tools { flex-wrap: wrap; }
+  .notepage-inner { padding: 26px 16px 90px; }
+}
+
+@keyframes sheet-up {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
 }

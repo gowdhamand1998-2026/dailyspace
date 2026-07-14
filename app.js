@@ -615,6 +615,57 @@ function onDesktop(type, id) {
   return !inCollection(type, id) && !isArchived(type, id);
 }
 
+/* ---------- per-device layouts ----------
+   Phones get their own position set (mpos / widgetsM / peoplePosM), so
+   arranging icons on mobile never disturbs the desktop layout and vice versa. */
+
+const IS_MOBILE = window.matchMedia("(max-width: 700px)").matches;
+
+/* the active position object for this device class (drags mutate it in place) */
+function P(obj) {
+  return IS_MOBILE ? obj.mpos : obj.pos;
+}
+
+function widgetPos(kind) {
+  return IS_MOBILE ? state.widgetsM[kind] : state.widgets[kind];
+}
+
+function peoplePosActive() {
+  return IS_MOBILE ? state.peoplePosM : state.peoplePos;
+}
+
+/* clean 4-column grid sized for the phone screen */
+function mobileTidy(persistIt = true) {
+  const h = window.innerHeight || 700;
+  const xs = [3, 27, 51, 75];
+  const stepY = Math.min(19, (122 / h) * 100);
+  const gridPos = (n) => ({ x: xs[n % 4], y: Math.min(84, 14 + Math.floor(n / 4) * stepY) });
+
+  let n = 0;
+  state.projects.filter((p) => onDesktop("project", p.id)).forEach((p) => (p.mpos = gridPos(n++)));
+  n = Math.ceil(n / 4) * 4;
+  state.links.filter((l) => onDesktop("link", l.id)).forEach((l) => (l.mpos = gridPos(n++)));
+  n = Math.ceil(n / 4) * 4;
+  state.collections.filter((c) => !isArchived("collection", c.id)).forEach((c) => (c.mpos = gridPos(n++)));
+  n = Math.ceil(n / 4) * 4;
+  state.widgetsM = {};
+  Object.keys(WIDGETS).forEach((k) => (state.widgetsM[k] = gridPos(n++)));
+  state.peoplePosM = gridPos(n++);
+
+  if (persistIt) persist();
+}
+
+/* first visit on a phone (or new items): give everything a tidy spot */
+function ensureMobileLayout() {
+  if (!IS_MOBILE) return;
+  const missing =
+    state.projects.some((p) => onDesktop("project", p.id) && !p.mpos) ||
+    state.links.some((l) => onDesktop("link", l.id) && !l.mpos) ||
+    state.collections.some((c) => !isArchived("collection", c.id) && !c.mpos) ||
+    !state.widgetsM || !state.peoplePosM;
+  if (missing) mobileTidy(false);
+}
+
 /* iOS-folder-style mini preview: up to 4 tiles of what's inside */
 function collectionPreview(c) {
   return c.items.slice(0, 4).map((it) => {
@@ -631,10 +682,12 @@ function collectionPreview(c) {
 }
 
 function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
+  ensureMobileLayout();
+
   const widgets = Object.entries(WIDGETS)
     .map(([kind, w]) => {
       const pending = taggedTasks(kind).filter((x) => !x.task.done).length;
-      const pos = state.widgets[kind];
+      const pos = widgetPos(kind);
       return `
         <div class="widget" data-widget="${kind}" style="left:${pos.x}%; top:${pos.y}%; --wt:${w.tint}">
           <div class="widget-tile">${w.icon}
@@ -654,7 +707,7 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
       return `
         <div class="icon ${p.id === selectedId ? "selected" : ""}"
              data-icon="${p.id}"
-             style="--pa:${accentFor(p.id)}; left:${p.pos.x}%; top:${p.pos.y}%">
+             style="--pa:${accentFor(p.id)}; left:${P(p).x}%; top:${P(p).y}%">
           <div class="icon-thumb">
             <span>${initials(p.name)}</span>
             <div class="icon-progress" style="width:${pct}%"></div>
@@ -702,11 +755,11 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
       ${icons}
       ${widgets}
       ${state.collections.filter((c) => !isArchived("collection", c.id)).map((c) => `
-        <div class="collection" data-collection="${c.id}" style="left:${c.pos.x}%; top:${c.pos.y}%">
+        <div class="collection" data-collection="${c.id}" style="left:${P(c).x}%; top:${P(c).y}%">
           <div class="collection-tile">${collectionPreview(c)}</div>
           <div class="icon-label">${escapeHtml(c.name)}</div>
         </div>`).join("")}
-      <div class="widget" data-people style="left:${state.peoplePos.x}%; top:${state.peoplePos.y}%; --wt:#f472b6">
+      <div class="widget" data-people style="left:${peoplePosActive().x}%; top:${peoplePosActive().y}%; --wt:#f472b6">
         <div class="widget-tile">${ICONS.users}
           ${(() => {
             const pending = state.people.filter((per) =>
@@ -717,7 +770,7 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
         <div class="icon-label">People</div>
       </div>
       ${state.links.filter((l) => onDesktop("link", l.id)).map((l) => `
-        <div class="linkicon" data-link="${l.id}" style="left:${l.pos.x}%; top:${l.pos.y}%">
+        <div class="linkicon" data-link="${l.id}" style="left:${P(l).x}%; top:${P(l).y}%">
           <div class="linkicon-tile">
             <img src="${linkIconSrc(l.url)}"
                  alt="" data-host="${escapeHtml(new URL(l.url).hostname)}" data-stage="0"
@@ -793,6 +846,12 @@ function wireDesktop() {
   // dock
   app.querySelector("[data-dock-add]").addEventListener("click", showAddChooser);
   app.querySelector("[data-dock-tidy]").addEventListener("click", () => {
+    if (IS_MOBILE) {
+      // phones have their own layout — tidy only touches the mobile grid
+      mobileTidy();
+      renderDesktop(null);
+      return;
+    }
     // compact grid computed in PIXELS from the real window size, then stored
     // as % — so icons never overlap on small screens and stay compact on big ones
     const rect = app.querySelector("[data-items]").getBoundingClientRect();
@@ -850,8 +909,8 @@ function wireDesktop() {
       const tId = targetEl.dataset.icon || targetEl.dataset.link;
       if (tType === type && tId === id) return false;
       const tPos = tType === "project"
-        ? getProject(tId).pos
-        : state.links.find((l) => l.id === tId).pos;
+        ? P(getProject(tId))
+        : P(state.links.find((l) => l.id === tId));
       const c = {
         id: uid(),
         name: "Collection",
@@ -939,7 +998,7 @@ function wireDesktop() {
   // project icons
   app.querySelectorAll("[data-icon]").forEach((el) => {
     const id = el.dataset.icon;
-    draggable(el, getProject(id).pos, {
+    draggable(el, P(getProject(id)), {
       onOpen: () => (window.location.hash = "#/p/" + id),
       groupType: "project",
       groupId: id,
@@ -949,7 +1008,7 @@ function wireDesktop() {
   // collections (draggable; can be dropped onto the archive)
   app.querySelectorAll("[data-collection]").forEach((el) => {
     const c = state.collections.find((x) => x.id === el.dataset.collection);
-    draggable(el, c.pos, {
+    draggable(el, P(c), {
       onOpen: () => (window.location.hash = "#/c/" + c.id),
       groupType: "collection",
       groupId: c.id,
@@ -962,14 +1021,14 @@ function wireDesktop() {
 
   // people object: drag to move, click to open the network page
   const peopleEl = app.querySelector("[data-people]");
-  if (peopleEl) draggable(peopleEl, state.peoplePos, {
+  if (peopleEl) draggable(peopleEl, peoplePosActive(), {
     onOpen: () => (window.location.hash = "#/people"),
   });
 
   // web links: drag to move (or group), click to confirm & open
   app.querySelectorAll("[data-link]").forEach((el) => {
     const link = state.links.find((l) => l.id === el.dataset.link);
-    draggable(el, link.pos, {
+    draggable(el, P(link), {
       onOpen: () => showOpenLinkModal(link),
       groupType: "link",
       groupId: link.id,
@@ -979,7 +1038,7 @@ function wireDesktop() {
   // floating widgets: drag to move, click to open
   app.querySelectorAll("[data-widget]").forEach((el) => {
     const kind = el.dataset.widget;
-    draggable(el, state.widgets[kind], {
+    draggable(el, widgetPos(kind), {
       onOpen: () => (window.location.hash = "#/w/" + kind),
     });
   });
