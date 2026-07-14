@@ -920,7 +920,17 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .pchip-lg { width: 38px; height: 38px; font-size: 15px; }
 
 /* people picker inside the task editor */
-.editor-people { display: flex; flex-wrap: wrap; gap: 6px; }
+.editor-people { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+#ed-pchips { display: inline-flex; gap: 4px; }
+#ed-pchips:empty { display: none; }
+
+.editor-ppicker {
+  padding: 10px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
 
 .people-pick {
   display: inline-flex;

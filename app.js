@@ -2093,16 +2093,17 @@ function bindItemSection(kind, items, projectId) {
           <input class="edit-input edit-link" id="ed-link" value="${escapeHtml(item.link || "")}"
             placeholder="Link (optional)" maxlength="300" />
         </div>
-        ${kind !== "tasks" ? "" : state.people.length ? `
+        ${kind !== "tasks" ? "" : `
         <div class="editor-people">
+          <span id="ed-pchips"></span>
+          <button class="people-pick" data-ed-addppl>+ Add people</button>
+        </div>
+        <div class="editor-people editor-ppicker" id="ed-ppicker" style="display:none">
           ${state.people.map((per) => `
             <button class="people-pick ${editPeople.has(per.id) ? "active" : ""}" data-edper="${per.id}" style="--pc:${per.color}">
               <span class="pchip" style="--pc:${per.color}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>${escapeHtml(per.name)}
             </button>
           `).join("")}
-        </div>` : `
-        <div class="editor-people">
-          <button class="people-pick" data-ed-gopeople>+ Connect people — add them on the People page first</button>
         </div>`}
         <div class="editor-actions">
           <button class="btn btn-ghost btn-sm editor-note-btn" data-ed-note>${NOTE_SVG} ${item.note ? "Open doc" : "Add doc"}</button>
@@ -2128,13 +2129,39 @@ function bindItemSection(kind, items, projectId) {
       });
     });
 
-    // people connections: toggle on/off
+    // people connections: "+ Add people" reveals the picker
+    const pchipsEl = li.querySelector("#ed-pchips");
+    const pickerEl = li.querySelector("#ed-ppicker");
+    const addPplBtn = li.querySelector("[data-ed-addppl]");
+
+    function renderEdChips() {
+      if (!pchipsEl) return;
+      pchipsEl.innerHTML = [...editPeople].map((pid) => {
+        const per = personById(pid);
+        return per ? `<span class="pchip" style="--pc:${per.color}" title="${escapeHtml(per.name)}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>` : "";
+      }).join("");
+    }
+    renderEdChips();
+
+    if (addPplBtn) addPplBtn.addEventListener("click", () => {
+      if (!state.people.length) {
+        // nobody to pick yet — save what's typed and go add people
+        applyEdits();
+        window.location.hash = "#/people";
+        return;
+      }
+      const open = pickerEl.style.display !== "none";
+      pickerEl.style.display = open ? "none" : "flex";
+      addPplBtn.textContent = open ? "+ Add people" : "Done";
+    });
+
     li.querySelectorAll("[data-edper]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const pid = btn.dataset.edper;
         if (editPeople.has(pid)) editPeople.delete(pid);
         else editPeople.add(pid);
         btn.classList.toggle("active", editPeople.has(pid));
+        renderEdChips();
       });
     });
 
@@ -2160,11 +2187,6 @@ function bindItemSection(kind, items, projectId) {
     li.querySelector("[data-ed-note]").addEventListener("click", () => {
       applyEdits(); // keep whatever was typed, then jump into the doc
       window.location.hash = `#/n/${projectId}/${kind}/${item.id}`;
-    });
-    const goPeople = li.querySelector("[data-ed-gopeople]");
-    if (goPeople) goPeople.addEventListener("click", () => {
-      applyEdits();
-      window.location.hash = "#/people";
     });
     li.addEventListener("keydown", (e) => {
       if (e.key === "Enter") save();
