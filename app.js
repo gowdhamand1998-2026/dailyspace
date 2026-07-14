@@ -1295,6 +1295,7 @@ function renderPeoplePage() {
 
   const lines = nodes.map((n) => `
     <line x1="${cx}" y1="${cy}" x2="${n.x}" y2="${n.y}"
+      data-line="${n.per.id}"
       class="pline ${selectedPersonId === n.per.id ? "active" : ""}"
       vector-effect="non-scaling-stroke" />`).join("");
 
@@ -1377,16 +1378,46 @@ function personPanelHtml(pid) {
   `;
 }
 
+/* select / deselect a person WITHOUT rebuilding the page — no flash */
+function selectPerson(pid) {
+  selectedPersonId = pid;
+
+  app.querySelectorAll(".pnode[data-person]").forEach((el) =>
+    el.classList.toggle("selected", el.dataset.person === pid)
+  );
+  app.querySelectorAll(".pline").forEach((el) =>
+    el.classList.toggle("active", el.dataset.line === pid)
+  );
+
+  const old = app.querySelector(".person-panel");
+  if (old) old.remove();
+  if (pid && personById(pid)) {
+    app.querySelector(".peoplepage").appendChild(elFromHtml(personPanelHtml(pid)));
+    wirePersonPanel();
+  }
+}
+
+/* update one node's badge/name in place after edits */
+function refreshNode(pid) {
+  const per = personById(pid);
+  const node = app.querySelector(`.pnode[data-person="${pid}"]`);
+  if (!per || !node) return;
+  const open = tasksForPerson(pid).filter((x) => !x.task.done).length;
+  node.querySelector(".pnode-disc").innerHTML =
+    `${initials(per.name)}${open ? `<span class="pnode-badge">${open}</span>` : ""}`;
+  node.querySelector(".pnode-name").textContent = per.name;
+}
+
 function wirePeoplePage() {
   app.querySelector("[data-back]").addEventListener("click", () => {
     selectedPersonId = null;
     window.location.hash = "#/";
   });
   document.addEventListener("keydown", function esc(e) {
+    if (!app.querySelector(".peoplepage")) { document.removeEventListener("keydown", esc); return; }
     if (e.key === "Escape") {
-      document.removeEventListener("keydown", esc);
-      if (selectedPersonId) { selectedPersonId = null; renderPeoplePage(); }
-      else window.location.hash = "#/";
+      if (selectedPersonId) selectPerson(null);
+      else { document.removeEventListener("keydown", esc); window.location.hash = "#/"; }
     }
   });
 
@@ -1395,38 +1426,35 @@ function wirePeoplePage() {
     b.addEventListener("click", showAddPersonModal)
   );
 
-  // select a node
-  app.querySelectorAll("[data-person]").forEach((el) => {
-    el.addEventListener("click", () => {
-      selectedPersonId = el.dataset.person;
-      renderPeoplePage();
-    });
+  // select a node — in place, panel slides in
+  app.querySelectorAll(".pnode[data-person]").forEach((el) => {
+    el.addEventListener("click", () => selectPerson(el.dataset.person));
   });
 
   // click empty map → clear selection
   const map = app.querySelector("[data-map]");
   map.addEventListener("pointerdown", (e) => {
     if ((e.target === map || e.target.classList.contains("people-lines")) && selectedPersonId) {
-      selectedPersonId = null;
-      renderPeoplePage();
+      selectPerson(null);
     }
   });
 
-  // panel wiring
+  if (selectedPersonId && personById(selectedPersonId)) wirePersonPanel();
+}
+
+function wirePersonPanel() {
   const panel = app.querySelector(".person-panel");
   if (!panel) return;
   const per = personById(selectedPersonId);
+  const pid = per.id;
 
-  panel.querySelector("[data-panel-close]").addEventListener("click", () => {
-    selectedPersonId = null;
-    renderPeoplePage();
-  });
+  panel.querySelector("[data-panel-close]").addEventListener("click", () => selectPerson(null));
 
   const nameInput = panel.querySelector("#pp-name");
   nameInput.addEventListener("blur", () => {
     per.name = nameInput.value.trim() || per.name;
     persist();
-    renderPeoplePage();
+    refreshNode(pid); // just the node, not the page
   });
   nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") nameInput.blur(); });
 
@@ -1448,6 +1476,7 @@ function wirePeoplePage() {
         }
       });
       persist();
+      refreshNode(pid); // badge count follows along
     });
   });
 
@@ -1471,7 +1500,7 @@ function wirePeoplePage() {
       );
       selectedPersonId = null;
       persist();
-      renderPeoplePage();
+      renderPeoplePage(); // structural: the whole orbit re-arranges
     }
   });
 }
