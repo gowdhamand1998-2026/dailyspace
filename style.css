@@ -713,14 +713,6 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 }
 
 /* compact project identity in the top bar */
-.proj-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 0 10px currentColor;
-}
-
 .proj-name-bar {
   width: auto;
   min-width: 60px;
@@ -736,25 +728,32 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .proj-name-bar:hover { border-color: var(--line); }
 .proj-name-bar:focus { border-color: var(--select); background: rgba(255, 255, 255, 0.05); box-shadow: none; }
 
+/* segmented tabs, always dead-center in the bar */
 .proj-tabs {
-  flex: 1;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  justify-content: center;
-  gap: 4px;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
 }
 
 .proj-tab {
   font-size: 12.5px;
   font-weight: 500;
   color: var(--text-3);
-  padding: 6px 15px;
-  border-radius: 9px;
+  padding: 5px 16px;
+  border-radius: 8px;
   transition: color 0.15s, background 0.15s;
 }
 .proj-tab:hover { color: var(--text-2); }
 .proj-tab.active {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.13);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .projectpage-inner {
@@ -783,24 +782,52 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 
 .note-card-text {
   width: 100%;
-  background: transparent;
-  border: none;
-  padding: 0;
+  outline: none;
   font-size: 14.5px;
   line-height: 1.7;
-  resize: none;
-  overflow: hidden;
   min-height: 24px;
 }
-.note-card-text:focus { background: transparent; border: none; box-shadow: none; }
+.note-card-text:empty::before {
+  content: attr(data-ph);
+  color: var(--text-3);
+  pointer-events: none;
+}
+.note-card-text ul { padding-left: 22px; margin: 4px 0; }
+.note-card-text li { margin: 2px 0; }
+.note-card-text b, .note-card-text strong { color: #fff; }
 
 .note-card-foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 0 4px;
+  gap: 8px;
+  padding: 8px 0 4px;
 }
-.note-date { font-size: 11px; color: var(--text-3); }
+
+/* mini formatting toolbar — appears when the note is focused or hovered */
+.note-tools-mini {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.note-card:hover .note-tools-mini,
+.note-card:focus-within .note-tools-mini { opacity: 1; }
+
+.fmt-btn {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+.fmt-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.09); }
+
+.note-date { font-size: 11px; color: var(--text-3); margin-left: auto; }
 .note-card .item-delete { opacity: 0; }
 .note-card:hover .item-delete { opacity: 1; }
 

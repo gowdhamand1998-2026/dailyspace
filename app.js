@@ -2075,13 +2075,26 @@ function wireWidgetWindow(kind) {
 
 /* ---------- full-screen project page with tabs ---------- */
 
+/* old notes were plain text; new ones store HTML from the rich editor */
+function noteBodyHtml(text) {
+  if (!text) return "";
+  if (/<[a-z][\s\S]*>/i.test(text)) return text; // already HTML
+  return escapeHtml(text).replace(/\n/g, "<br>");
+}
+
 function noteCardHtml(n) {
   const d = new Date(n.createdAt);
   const when = isNaN(d) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return `
     <div class="note-card" data-note="${n.id}">
-      <textarea class="note-card-text" placeholder="Write...">${escapeHtml(n.text)}</textarea>
+      <div class="note-card-text" contenteditable="true" data-ph="Write...">${noteBodyHtml(n.text)}</div>
       <div class="note-card-foot">
+        <div class="note-tools-mini">
+          <button class="fmt-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+          <button class="fmt-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+          <button class="fmt-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+          <button class="fmt-btn" data-cmd="insertUnorderedList" title="Bullet list">&bull; List</button>
+        </div>
         <span class="note-date">${when}</span>
         <button class="action-btn item-delete" data-delnote title="Delete note">&times;</button>
       </div>
@@ -2152,7 +2165,6 @@ function renderProjectPage(id, tab) {
     <div class="projectpage" style="--pa:${accent}">
       <div class="notepage-bar">
         <button class="back-btn" data-back title="Back to desktop">&larr;</button>
-        <span class="proj-dot" style="background:${accent}"></span>
         <input class="proj-name-bar" id="pj-name" value="${escapeHtml(p.name)}" maxlength="60" />
         <div class="proj-tabs">
           ${PROJ_TABS.map((t) => `
@@ -2208,22 +2220,31 @@ function wireProjectPage(id) {
   if (projTab === "notes") {
     const feed = page.querySelector("#notes-feed");
 
-    function autogrow(ta) {
-      ta.style.height = "auto";
-      ta.style.height = ta.scrollHeight + "px";
-    }
-
     function wireNoteCard(card) {
       const note = p.notesList.find((n) => n.id === card.dataset.note);
-      const ta = card.querySelector(".note-card-text");
-      autogrow(ta);
+      const editor = card.querySelector(".note-card-text");
+
+      function saveNote() {
+        note.text = editor.textContent.trim() ? editor.innerHTML : "";
+        persist();
+      }
+
       let timer = null;
-      ta.addEventListener("input", () => {
-        autogrow(ta);
+      editor.addEventListener("input", () => {
         clearTimeout(timer);
-        timer = setTimeout(() => { note.text = ta.value; persist(); }, 500);
+        timer = setTimeout(saveNote, 500);
       });
-      ta.addEventListener("blur", () => { note.text = ta.value; persist(); });
+      editor.addEventListener("blur", saveNote);
+
+      // formatting: bold / italic / underline / bullets — keep the selection alive
+      card.querySelectorAll("[data-cmd]").forEach((btn) => {
+        btn.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          document.execCommand(btn.dataset.cmd, false, null);
+          saveNote();
+        });
+      });
+
       card.querySelector("[data-delnote]").addEventListener("click", () => {
         if (!confirm("Delete this note?")) return;
         p.notesList = p.notesList.filter((n) => n.id !== note.id);
@@ -2243,6 +2264,7 @@ function wireProjectPage(id) {
       feed.prepend(card);
       wireNoteCard(card);
       card.querySelector(".note-card-text").focus();
+
     });
 
     page.querySelectorAll("[data-opendoc]").forEach((el) => {
