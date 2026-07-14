@@ -709,7 +709,13 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  animation: fade 0.2s var(--ease) both;
+  z-index: 15;
+  animation: page-in 0.22s var(--ease) both;
+}
+
+@keyframes page-in {
+  from { opacity: 0; transform: scale(0.985); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 /* compact project identity in the top bar */

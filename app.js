@@ -2165,7 +2165,7 @@ function renderProjectPage(id, tab) {
 
   const body = projTabBodyHtml(p);
 
-  app.innerHTML = `
+  const pageHtml = `
     <div class="projectpage" style="--pa:${accent}">
       <div class="notepage-bar">
         <button class="back-btn" data-back title="Back to desktop">&larr;</button>
@@ -2188,6 +2188,17 @@ function renderProjectPage(id, tab) {
     </div>
   `;
 
+  // if the desktop is already on screen, layer the page OVER it and animate in —
+  // no blank frame, no flash. Otherwise (deep link/refresh) render normally.
+  const desktopBehind = app.querySelector("[data-desktop]");
+  const existingPage = app.querySelector(".projectpage");
+  if (desktopBehind && !existingPage) {
+    app.querySelectorAll(".window-backdrop, .person-panel").forEach((el) => el.remove());
+    app.appendChild(elFromHtml(pageHtml));
+  } else {
+    app.innerHTML = pageHtml;
+  }
+
   wireProjectPage(id);
 }
 
@@ -2195,7 +2206,7 @@ function wireProjectPage(id) {
   const p = getProject(id);
   const page = app.querySelector(".projectpage");
 
-  app.querySelector("[data-back]").addEventListener("click", () => (window.location.hash = "#/"));
+  page.querySelector("[data-back]").addEventListener("click", () => (window.location.hash = "#/"));
   document.addEventListener("keydown", function esc(e) {
     if (!app.querySelector(".projectpage")) { document.removeEventListener("keydown", esc); return; }
     if (e.key === "Escape" && !e.target.closest("input, textarea, .item-editor")) {
