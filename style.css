@@ -1396,11 +1396,17 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   padding: 0;
 }
 .item-check:active { transform: scale(0.9); }
-.item-check svg { opacity: 0; }
+.item-check svg { opacity: 0; transform: scale(0.4); transition: opacity 0.15s, transform 0.2s var(--ease); }
 .item.done .item-check { background: var(--pa, var(--select)); border-color: var(--pa, var(--select)); }
-.item.done .item-check svg { opacity: 1; }
+.item.done .item-check svg { opacity: 1; transform: scale(1); animation: check-pop 0.3s var(--ease); }
 
-.item-text { flex: 0 1 auto; min-width: 0; font-size: 14px; display: flex; align-items: center; overflow: hidden; }
+@keyframes check-pop {
+  0% { transform: scale(0.4); }
+  60% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+.item-text { flex: 0 1 auto; min-width: 0; font-size: 14px; display: flex; align-items: center; overflow: hidden; transition: color 0.25s; }
 .item.done .item-text { color: var(--text-3); text-decoration: line-through; }
 
 /* indicators attached to the text: part of the task, not floating */

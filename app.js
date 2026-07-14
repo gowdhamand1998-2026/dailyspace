@@ -1524,12 +1524,13 @@ function wireWidgetWindow(kind) {
     btn.addEventListener("click", () => {
       const taskId = btn.dataset.wtoggle;
       const source = WIDGETS[kind].source;
+      let toggled = null;
       state.projects.forEach((p) => {
         const t = p[source].find((x) => x.id === taskId);
-        if (t) t.done = !t.done;
+        if (t) { t.done = !t.done; toggled = t; }
       });
       persist();
-      renderDesktop(null, kind);
+      if (toggled) btn.closest(".item").classList.toggle("done", toggled.done);
     });
   });
 
@@ -1817,10 +1818,16 @@ function bindItemSection(kind, items, projectId) {
 
   section.querySelectorAll(".item").forEach((li) => {
     const item = items.find((i) => i.id === li.dataset.id);
+    // completing is seamless: no re-render, just animate the state in place
     li.querySelector("[data-toggle]").addEventListener("click", () => {
       item.done = !item.done;
       persist();
-      rerender();
+      li.classList.toggle("done", item.done);
+      const count = section.querySelector(".section-count");
+      if (count) {
+        const doneCount = items.filter((i) => i.done).length;
+        count.textContent = items.length ? `${doneCount} / ${items.length}` : "";
+      }
     });
     li.querySelector("[data-delete]").addEventListener("click", () => {
       const idx = items.findIndex((i) => i.id === li.dataset.id);
