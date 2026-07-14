@@ -158,6 +158,8 @@ function ensureDefaults(s) {
   if (!s.archivePos) s.archivePos = { x: 92, y: 84 };
   if (!s.people) s.people = [];
   if (!s.peoplePos) s.peoplePos = { x: 92, y: 84 };
+  if (!s.peopleEdges) s.peopleEdges = []; // person↔person connections [{a, b}]
+  if (!s.mePos) s.mePos = { x: 50, y: 47 };
   if (!s.period) s.period = "day";
   if (s.timebarHidden === undefined) s.timebarHidden = false;
   return s;
@@ -577,6 +579,18 @@ function tasksForPerson(pid) {
     });
   });
   return out;
+}
+
+/* person↔person connection edges (undirected) */
+function connectedIds(pid) {
+  return state.peopleEdges
+    .filter((e) => e.a === pid || e.b === pid)
+    .map((e) => (e.a === pid ? e.b : e.a));
+}
+
+function setConnections(pid, ids) {
+  state.peopleEdges = state.peopleEdges.filter((e) => e.a !== pid && e.b !== pid);
+  ids.forEach((other) => state.peopleEdges.push({ a: pid, b: other }));
 }
 
 /* small avatar chips shown on task rows */
@@ -1295,29 +1309,43 @@ let selectedPersonId = null;
 
 function renderPeoplePage() {
   const ppl = state.people;
-  const cx = 50, cy = 47;      // "Me" sits here (in % of the map)
-  const rx = 34, ry = 32;      // orbit radii
+  const me = state.mePos;
 
-  const nodes = ppl.map((per, i) => {
-    const a = (i / ppl.length) * Math.PI * 2 - Math.PI / 2;
-    return { per, x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) };
+  // anyone without a saved position gets an orbital starting spot
+  let seeded = false;
+  ppl.forEach((per, i) => {
+    if (!per.pos) {
+      const a = (i / ppl.length) * Math.PI * 2 - Math.PI / 2;
+      per.pos = { x: 50 + 34 * Math.cos(a), y: 47 + 32 * Math.sin(a) };
+      seeded = true;
+    }
   });
+  if (seeded) persist();
 
-  const lines = nodes.map((n) => `
-    <line x1="${cx}" y1="${cy}" x2="${n.x}" y2="${n.y}"
-      data-line="${n.per.id}"
-      class="pline ${selectedPersonId === n.per.id ? "active" : ""}"
+  const meLines = ppl.map((per) => `
+    <line x1="${me.x}" y1="${me.y}" x2="${per.pos.x}" y2="${per.pos.y}"
+      data-line="${per.id}"
+      class="pline ${selectedPersonId === per.id ? "active" : ""}"
       vector-effect="non-scaling-stroke" />`).join("");
 
-  const nodeHtml = nodes.map((n) => {
-    const open = tasksForPerson(n.per.id).filter((x) => !x.task.done).length;
+  const edgeLines = state.peopleEdges.map((e) => {
+    const a = personById(e.a), b = personById(e.b);
+    if (!a || !b) return "";
     return `
-      <div class="pnode ${selectedPersonId === n.per.id ? "selected" : ""}"
-           data-person="${n.per.id}" style="left:${n.x}%; top:${n.y}%; --pc:${n.per.color}">
-        <div class="pnode-disc">${initials(n.per.name)}
+      <line x1="${a.pos.x}" y1="${a.pos.y}" x2="${b.pos.x}" y2="${b.pos.y}"
+        data-edge data-a="${e.a}" data-b="${e.b}"
+        class="pedge" vector-effect="non-scaling-stroke" />`;
+  }).join("");
+
+  const nodeHtml = ppl.map((per) => {
+    const open = tasksForPerson(per.id).filter((x) => !x.task.done).length;
+    return `
+      <div class="pnode ${selectedPersonId === per.id ? "selected" : ""}"
+           data-person="${per.id}" style="left:${per.pos.x}%; top:${per.pos.y}%; --pc:${per.color}">
+        <div class="pnode-disc">${initials(per.name)}
           ${open ? `<span class="pnode-badge">${open}</span>` : ""}
         </div>
-        <div class="pnode-name">${escapeHtml(n.per.name)}</div>
+        <div class="pnode-name">${escapeHtml(per.name)}</div>
       </div>`;
   }).join("");
 
@@ -1330,10 +1358,10 @@ function renderPeoplePage() {
       </div>
       <div class="people-map" data-map>
         ${ppl.length ? `
-          <svg class="people-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>
+          <svg class="people-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${meLines}${edgeLines}</svg>
           ${nodeHtml}
-          <div class="pnode pnode-me" style="left:${cx}%; top:${cy}%">
-            <div class="pnode-disc me-disc">Me</div>
+          <div class="pnode pnode-me" data-me style="left:${me.x}%; top:${me.y}%">
+            <div class="pnode-disc me-disc">N</div>
           </div>
         ` : `
           <div class="people-empty">
@@ -1347,6 +1375,56 @@ function renderPeoplePage() {
   `;
 
   wirePeoplePage();
+}
+
+/* while a node moves, every line touching it follows */
+function updateLinesFor(pid, x, y) {
+  const meLine = app.querySelector(`.pline[data-line="${pid}"]`);
+  if (meLine) { meLine.setAttribute("x2", x); meLine.setAttribute("y2", y); }
+  app.querySelectorAll(`[data-edge]`).forEach((el) => {
+    if (el.dataset.a === pid) { el.setAttribute("x1", x); el.setAttribute("y1", y); }
+    if (el.dataset.b === pid) { el.setAttribute("x2", x); el.setAttribute("y2", y); }
+  });
+}
+
+/* drag behavior for map nodes (people + the center) */
+function mapDraggable(el, pos, { onClick, onMove }) {
+  el.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    const map = app.querySelector("[data-map]");
+    const rect = map.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const origX = pos.x, origY = pos.y;
+    let dragged = false;
+
+    function move(ev) {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      if (!dragged && Math.hypot(dx, dy) > 5) {
+        dragged = true;
+        el.classList.add("dragging");
+      }
+      if (dragged) {
+        pos.x = Math.min(95, Math.max(5, origX + (dx / rect.width) * 100));
+        pos.y = Math.min(90, Math.max(8, origY + (dy / rect.height) * 100));
+        el.style.left = pos.x + "%";
+        el.style.top = pos.y + "%";
+        onMove(pos.x, pos.y);
+      }
+    }
+
+    function up() {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.classList.remove("dragging");
+      if (dragged) persist();
+      else if (onClick) onClick();
+    }
+
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  });
 }
 
 function personPanelHtml(pid) {
@@ -1373,6 +1451,18 @@ function personPanelHtml(pid) {
       </div>
       <textarea class="person-desc" id="pp-desc" rows="2"
         placeholder="Who is this? Add a short description...">${escapeHtml(per.desc || "")}</textarea>
+
+      <div class="section-title" style="margin-top:14px;">Connections</div>
+      <div class="editor-people person-conns">
+        ${connectedIds(pid).map((oid) => {
+          const o = personById(oid);
+          return o ? `
+            <button class="people-pick" data-selperson="${o.id}" style="--pc:${o.color}">
+              <span class="pchip" style="--pc:${o.color}">${escapeHtml(o.name.charAt(0).toUpperCase())}</span>${escapeHtml(o.name)}
+            </button>` : "";
+        }).join("")}
+        <button class="people-pick" data-add-conn>+ Connect</button>
+      </div>
 
       <div class="section-title" style="margin-top:16px;">Connected tasks
         <span class="section-count">${connected.length ? `${done.length} / ${connected.length}` : ""}</span>
@@ -1436,9 +1526,24 @@ function wirePeoplePage() {
     b.addEventListener("click", showAddPersonModal)
   );
 
-  // select a node — in place, panel slides in
+  // nodes: drag freely around the canvas; a plain click opens the panel
   app.querySelectorAll(".pnode[data-person]").forEach((el) => {
-    el.addEventListener("click", () => selectPerson(el.dataset.person));
+    const per = personById(el.dataset.person);
+    mapDraggable(el, per.pos, {
+      onClick: () => selectPerson(per.id),
+      onMove: (x, y) => updateLinesFor(per.id, x, y),
+    });
+  });
+
+  // the center node moves too — all its lines follow
+  const meEl = app.querySelector("[data-me]");
+  if (meEl) mapDraggable(meEl, state.mePos, {
+    onMove: (x, y) => {
+      app.querySelectorAll(".pline").forEach((l) => {
+        l.setAttribute("x1", x);
+        l.setAttribute("y1", y);
+      });
+    },
   });
 
   // click empty map → clear selection
@@ -1497,9 +1602,22 @@ function wirePersonPanel() {
     });
   });
 
+  // person↔person connections
+  panel.querySelectorAll("[data-selperson]").forEach((btn) => {
+    btn.addEventListener("click", () => selectPerson(btn.dataset.selperson));
+  });
+  panel.querySelector("[data-add-conn]").addEventListener("click", () => {
+    showPeoplePickerModal(new Set(connectedIds(pid)), (picked) => {
+      setConnections(pid, [...picked]);
+      persist();
+      renderPeoplePage(); // edges changed — redraw the map
+    }, () => {}, pid);
+  });
+
   panel.querySelector("[data-person-delete]").addEventListener("click", () => {
     if (confirm(`Remove "${per.name}"? Their task connections will be cleared.`)) {
       state.people = state.people.filter((x) => x.id !== per.id);
+      state.peopleEdges = state.peopleEdges.filter((e) => e.a !== per.id && e.b !== per.id);
       state.projects.forEach((p) =>
         p.tasks.forEach((t) => {
           if (t.people) {
@@ -1516,12 +1634,13 @@ function wirePersonPanel() {
 }
 
 /* modal for connecting people to a task — rows with avatar, name, check circle */
-function showPeoplePickerModal(selectedSet, onDone, onGoPeople) {
+function showPeoplePickerModal(selectedSet, onDone, onGoPeople, excludeId) {
   const backdrop = document.createElement("div");
   backdrop.className = "window-backdrop";
   const temp = new Set(selectedSet);
+  const pickable = state.people.filter((p) => p.id !== excludeId);
 
-  const rows = state.people.map((per) => `
+  const rows = pickable.map((per) => `
     <button class="crow pick-row ${temp.has(per.id) ? "selected" : ""}" data-pick="${per.id}">
       <span class="pchip" style="--pc:${per.color}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>
       <span class="crow-name">${escapeHtml(per.name)}</span>
@@ -1531,13 +1650,13 @@ function showPeoplePickerModal(selectedSet, onDone, onGoPeople) {
   backdrop.innerHTML = `
     <div class="collection-panel">
       <div class="picker-heading">Connect people</div>
-      ${state.people.length
+      ${pickable.length
         ? `<div class="collection-list">${rows}</div>`
         : `<div class="empty-hint picker-empty">No people yet — add them on the People page first.</div>`}
       <div class="picker-actions">
-        ${state.people.length ? "" : `<button class="btn btn-ghost" data-gopeople>Open People page</button>`}
+        ${pickable.length ? "" : `<button class="btn btn-ghost" data-gopeople>Open People page</button>`}
         <button class="btn btn-ghost" data-pk-cancel>Cancel</button>
-        ${state.people.length ? `<button class="btn btn-primary" data-pk-done>Done</button>` : ""}
+        ${pickable.length ? `<button class="btn btn-primary" data-pk-done>Done</button>` : ""}
       </div>
     </div>
   `;

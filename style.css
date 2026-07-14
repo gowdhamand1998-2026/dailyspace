@@ -739,6 +739,20 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 }
 .pline.active { stroke: rgba(255, 255, 255, 0.35); }
 
+/* person↔person relationship edges */
+.pedge {
+  stroke: rgba(192, 132, 252, 0.35);
+  stroke-width: 1.5px;
+}
+
+.pnode { cursor: grab; touch-action: none; }
+.pnode:active { cursor: grabbing; }
+.pnode.dragging { z-index: 6; }
+.pnode.dragging .pnode-disc { transform: scale(1.12); }
+.pnode-me { cursor: grab; }
+
+.person-conns { margin-bottom: 4px; }
+
 .pnode {
   position: absolute;
   transform: translate(-50%, -50%);
