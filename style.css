@@ -568,33 +568,31 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   white-space: nowrap;
 }
 
-/* ---------- archive box ---------- */
-
-.archive-tile { position: relative; }
-.archive-tile > svg {
-  width: 26px;
-  height: 26px;
-  color: var(--text-2);
-  filter: none;
-}
-.archive-obj:hover .archive-tile > svg { color: var(--text); }
+/* ---------- archive (in the dock) ---------- */
 
 .archive-count {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 19px;
-  height: 19px;
-  padding: 0 5px;
+  top: 2px;
+  right: 2px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
   border-radius: 999px;
   background: rgba(70, 71, 78, 0.95);
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* dock archive lights up when an icon is dragged over it */
+.dock-btn.drop-target {
+  transform: translateY(-6px) scale(1.15);
+  background: rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 0 2.5px rgba(59, 130, 246, 0.65), 0 0 20px rgba(59, 130, 246, 0.35);
 }
 
 .crow-collthumb { background: rgba(255, 255, 255, 0.09); }

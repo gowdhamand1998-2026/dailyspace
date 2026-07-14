@@ -645,12 +645,6 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
           <div class="collection-tile">${collectionPreview(c)}</div>
           <div class="icon-label">${escapeHtml(c.name)}</div>
         </div>`).join("")}
-      <div class="widget archive-obj" data-archive style="left:${state.archivePos.x}%; top:${state.archivePos.y}%">
-        <div class="widget-tile archive-tile">${ICONS.archive}
-          ${state.archived.length ? `<span class="archive-count">${state.archived.length}</span>` : ""}
-        </div>
-        <div class="icon-label">Archive</div>
-      </div>
       ${state.links.filter((l) => onDesktop("link", l.id)).map((l) => `
         <div class="linkicon" data-link="${l.id}" style="left:${l.pos.x}%; top:${l.pos.y}%">
           <div class="linkicon-tile">
@@ -670,6 +664,10 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
         <button class="dock-btn" data-tip="Add" data-dock-add>${ICONS.plus}</button>
         <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="Tidy icons" data-dock-tidy>${ICONS.shuffle}</button>
+        <div class="dock-sep"></div>
+        <button class="dock-btn" data-tip="Archive" data-archive>${ICONS.archive}
+          ${state.archived.length ? `<span class="archive-count">${state.archived.length}</span>` : ""}
+        </button>
         ${minimizedId && getProject(minimizedId) ? `
         <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="${escapeHtml(getProject(minimizedId).name)}" data-dock-restore>
@@ -895,11 +893,9 @@ function wireDesktop() {
     });
   });
 
-  // the archive box itself
+  // archive lives in the dock: click opens it, dragging icons onto it archives them
   const archiveEl = app.querySelector("[data-archive]");
-  if (archiveEl) draggable(archiveEl, state.archivePos, {
-    onOpen: () => (window.location.hash = "#/a"),
-  });
+  if (archiveEl) archiveEl.addEventListener("click", () => (window.location.hash = "#/a"));
 
   // web links: drag to move (or group), click to confirm & open
   app.querySelectorAll("[data-link]").forEach((el) => {
