@@ -753,6 +753,17 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 
 .person-conns { margin-bottom: 4px; }
 
+/* inline "add someone new" row in the connect picker */
+.picker-newperson {
+  display: flex;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 12px;
+}
+.picker-newperson input { flex: 1; padding: 7px 11px; font-size: 13px; }
+
 .pnode {
   position: absolute;
   transform: translate(-50%, -50%);

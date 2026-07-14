@@ -1611,7 +1611,7 @@ function wirePersonPanel() {
       setConnections(pid, [...picked]);
       persist();
       renderPeoplePage(); // edges changed — redraw the map
-    }, () => {}, pid);
+    }, pid);
   });
 
   panel.querySelector("[data-person-delete]").addEventListener("click", () => {
@@ -1633,56 +1633,88 @@ function wirePersonPanel() {
   });
 }
 
-/* modal for connecting people to a task — rows with avatar, name, check circle */
-function showPeoplePickerModal(selectedSet, onDone, onGoPeople, excludeId) {
+/* modal for connecting people — pick existing OR create someone new right here */
+function showPeoplePickerModal(selectedSet, onDone, excludeId) {
   const backdrop = document.createElement("div");
   backdrop.className = "window-backdrop";
   const temp = new Set(selectedSet);
   const pickable = state.people.filter((p) => p.id !== excludeId);
 
-  const rows = pickable.map((per) => `
+  const rowHtml = (per) => `
     <button class="crow pick-row ${temp.has(per.id) ? "selected" : ""}" data-pick="${per.id}">
       <span class="pchip" style="--pc:${per.color}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>
       <span class="crow-name">${escapeHtml(per.name)}</span>
       <span class="pick-circle">${CHECK_SVG}</span>
-    </button>`).join("");
+    </button>`;
 
   backdrop.innerHTML = `
     <div class="collection-panel">
       <div class="picker-heading">Connect people</div>
-      ${pickable.length
-        ? `<div class="collection-list">${rows}</div>`
-        : `<div class="empty-hint picker-empty">No people yet — add them on the People page first.</div>`}
+      <div class="collection-list" data-pk-list>
+        ${pickable.map(rowHtml).join("")}
+        ${pickable.length ? "" : `<div class="empty-hint picker-empty" data-pk-empty>No one yet — add someone below.</div>`}
+      </div>
+      <div class="picker-newperson">
+        <input type="text" id="pk-newname" placeholder="Or add someone new…" maxlength="60" />
+        <button class="btn btn-ghost btn-sm" data-pk-new>Add</button>
+      </div>
       <div class="picker-actions">
-        ${pickable.length ? "" : `<button class="btn btn-ghost" data-gopeople>Open People page</button>`}
         <button class="btn btn-ghost" data-pk-cancel>Cancel</button>
-        ${pickable.length ? `<button class="btn btn-primary" data-pk-done>Done</button>` : ""}
+        <button class="btn btn-primary" data-pk-done>Done</button>
       </div>
     </div>
   `;
   app.appendChild(backdrop);
 
+  const listEl = backdrop.querySelector("[data-pk-list]");
+  const newInput = backdrop.querySelector("#pk-newname");
+
   function close() { backdrop.remove(); }
 
-  backdrop.querySelectorAll("[data-pick]").forEach((el) => {
+  function wireRow(el) {
     el.addEventListener("click", () => {
       const pid = el.dataset.pick;
       if (temp.has(pid)) temp.delete(pid);
       else temp.add(pid);
       el.classList.toggle("selected", temp.has(pid));
     });
+  }
+  backdrop.querySelectorAll("[data-pick]").forEach(wireRow);
+
+  // create a new person inline — instantly selected
+  function addNew() {
+    const name = newInput.value.trim();
+    if (!name) { newInput.focus(); return; }
+    const per = {
+      id: uid(),
+      name,
+      desc: "",
+      color: PEOPLE_COLORS[state.people.length % PEOPLE_COLORS.length],
+    };
+    state.people.push(per);
+    persist();
+    temp.add(per.id);
+    const empty = backdrop.querySelector("[data-pk-empty]");
+    if (empty) empty.remove();
+    const row = elFromHtml(rowHtml(per));
+    listEl.appendChild(row);
+    wireRow(row);
+    newInput.value = "";
+    newInput.focus();
+  }
+
+  backdrop.querySelector("[data-pk-new]").addEventListener("click", addNew);
+  newInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.stopPropagation(); addNew(); }
   });
 
-  const doneBtn = backdrop.querySelector("[data-pk-done]");
-  if (doneBtn) doneBtn.addEventListener("click", () => { onDone(temp); close(); });
-  const goBtn = backdrop.querySelector("[data-gopeople]");
-  if (goBtn) goBtn.addEventListener("click", () => { close(); onGoPeople(); });
+  backdrop.querySelector("[data-pk-done]").addEventListener("click", () => { onDone(temp); close(); });
   backdrop.querySelector("[data-pk-cancel]").addEventListener("click", close);
   backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
   backdrop.addEventListener("keydown", (e) => {
     e.stopPropagation(); // don't leak Enter/Esc into the task editor behind
     if (e.key === "Escape") close();
-    if (e.key === "Enter" && doneBtn) { onDone(temp); close(); }
+    if (e.key === "Enter" && e.target !== newInput) { onDone(temp); close(); }
   });
 }
 
@@ -2352,9 +2384,6 @@ function bindItemSection(kind, items, projectId) {
         editPeople.clear();
         picked.forEach((v) => editPeople.add(v));
         renderEdChips();
-      }, () => {
-        applyEdits(); // nobody to pick yet — keep edits and go add people
-        window.location.hash = "#/people";
       });
     });
 
