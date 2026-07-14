@@ -728,6 +728,9 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .proj-name-bar:hover { border-color: var(--line); }
 .proj-name-bar:focus { border-color: var(--select); background: rgba(255, 255, 255, 0.05); box-shadow: none; }
 
+/* archive & delete pinned to the far right corner */
+.projectpage .titlebar-actions { margin-left: auto; }
+
 /* segmented tabs, always dead-center in the bar */
 .proj-tabs {
   position: absolute;
