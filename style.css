@@ -712,6 +712,30 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   animation: fade 0.2s var(--ease) both;
 }
 
+/* compact project identity in the top bar */
+.proj-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.proj-name-bar {
+  width: auto;
+  min-width: 60px;
+  max-width: 220px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  padding: 3px 8px;
+}
+.proj-name-bar:hover { border-color: var(--line); }
+.proj-name-bar:focus { border-color: var(--select); background: rgba(255, 255, 255, 0.05); box-shadow: none; }
+
 .proj-tabs {
   flex: 1;
   display: flex;

@@ -2151,7 +2151,9 @@ function renderProjectPage(id, tab) {
   app.innerHTML = `
     <div class="projectpage" style="--pa:${accent}">
       <div class="notepage-bar">
-        <button class="back-btn" data-back>&larr; Desktop</button>
+        <button class="back-btn" data-back title="Back to desktop">&larr;</button>
+        <span class="proj-dot" style="background:${accent}"></span>
+        <input class="proj-name-bar" id="pj-name" value="${escapeHtml(p.name)}" maxlength="60" />
         <div class="proj-tabs">
           ${PROJ_TABS.map((t) => `
             <button class="proj-tab ${projTab === t.key ? "active" : ""}" data-ptab="${t.key}">${t.label}</button>
@@ -2165,11 +2167,6 @@ function renderProjectPage(id, tab) {
         </div>
       </div>
       <div class="projectpage-inner">
-        <div class="project-hero">
-          <input class="project-title" id="pj-name" value="${escapeHtml(p.name)}" maxlength="60" />
-          <textarea class="project-desc" id="pj-desc" rows="1"
-            placeholder="Add a short description...">${escapeHtml(p.description)}</textarea>
-        </div>
         ${body}
       </div>
     </div>
@@ -2206,7 +2203,6 @@ function wireProjectPage(id) {
     });
   }
   bindField("#pj-name", (v) => { p.name = v || p.name; });
-  bindField("#pj-desc", (v) => { p.description = v; });
 
   // tab-specific wiring
   if (projTab === "notes") {
@@ -2229,6 +2225,7 @@ function wireProjectPage(id) {
       });
       ta.addEventListener("blur", () => { note.text = ta.value; persist(); });
       card.querySelector("[data-delnote]").addEventListener("click", () => {
+        if (!confirm("Delete this note?")) return;
         p.notesList = p.notesList.filter((n) => n.id !== note.id);
         persist();
         card.remove(); // in place, no flash
