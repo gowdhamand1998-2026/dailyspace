@@ -697,28 +697,6 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .note-editor li { margin: 4px 0; }
 .note-editor p { margin: 8px 0; }
 
-/* note button on task rows — same chip language as the link chip */
-.item-notebtn {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  color: var(--text-3);
-  opacity: 0.5;
-  transition: opacity 0.15s, color 0.15s, background 0.15s;
-}
-.item-notebtn:hover { opacity: 1; color: var(--text); background: rgba(255, 255, 255, 0.08); }
-.item-notebtn.has-note {
-  opacity: 1;
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.12);
-}
-.item-notebtn.has-note:hover { background: rgba(251, 191, 36, 0.22); }
-.item-notebtn svg { width: 12px; height: 12px; }
 
 /* ---------- collections (iOS-folder style) ---------- */
 
@@ -1422,42 +1400,55 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .item.done .item-check { background: var(--pa, var(--select)); border-color: var(--pa, var(--select)); }
 .item.done .item-check svg { opacity: 1; }
 
-.item-text { flex: 1; font-size: 14px; display: flex; align-items: center; }
+.item-text { flex: 0 1 auto; min-width: 0; font-size: 14px; display: flex; align-items: center; overflow: hidden; }
 .item.done .item-text { color: var(--text-3); text-decoration: line-through; }
 
-.item-delete {
+/* indicators attached to the text: part of the task, not floating */
+.item-badges { display: inline-flex; gap: 5px; flex-shrink: 0; }
+
+.badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s;
+}
+.badge svg { width: 11px; height: 11px; }
+.badge-note { color: #fbbf24; background: rgba(251, 191, 36, 0.13); }
+.badge-note:hover { background: rgba(251, 191, 36, 0.25); }
+.badge-link { color: #60a5fa; background: rgba(59, 130, 246, 0.13); }
+.badge-link:hover { background: rgba(59, 130, 246, 0.25); }
+
+/* hover actions live together at the far edge */
+.item-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
   flex-shrink: 0;
+}
+
+.action-btn {
   width: 22px;
   height: 22px;
   border-radius: 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-3);
   padding: 0;
+  color: var(--text-3);
   opacity: 0;
   transition: opacity 0.15s, color 0.15s, background 0.15s;
   font-size: 15px;
   line-height: 1;
 }
-.item:hover .item-delete { opacity: 1; }
-.item-delete:hover { color: #f87171; background: rgba(248, 113, 113, 0.12); }
+.item:hover .action-btn { opacity: 1; }
+.action-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+.action-btn svg { width: 12px; height: 12px; }
+.action-btn.item-delete:hover { color: #f87171; background: rgba(248, 113, 113, 0.12); }
 
-/* attached link: always visible chip; attach/edit button shows on hover */
-.item-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  color: var(--select);
-  background: rgba(59, 130, 246, 0.12);
-  flex-shrink: 0;
-  transition: background 0.15s;
-}
-.item-link:hover { background: rgba(59, 130, 246, 0.25); }
-.item-link svg { width: 11px; height: 11px; }
 
 .item-text { cursor: text; }
 
