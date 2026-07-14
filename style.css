@@ -699,16 +699,15 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .note-editor li { margin: 4px 0; }
 .note-editor p { margin: 8px 0; }
 
-/* note button on task rows */
+/* note button on task rows — always visible */
 .item-notebtn {
   flex-shrink: 0;
   color: var(--text-3);
   padding: 2px 4px;
-  opacity: 0;
+  opacity: 0.55;
   transition: opacity 0.15s, color 0.15s;
 }
-.item:hover .item-notebtn { opacity: 1; }
-.item-notebtn:hover { color: var(--text); }
+.item-notebtn:hover { opacity: 1; color: var(--text); }
 .item-notebtn.has-note { opacity: 1; color: #fbbf24; }
 .item-notebtn svg { width: 13px; height: 13px; }
 
