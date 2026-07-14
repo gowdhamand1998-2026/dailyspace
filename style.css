@@ -1419,8 +1419,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .badge svg { width: 14px; height: 14px; }
 .badge-note { color: #fbbf24; background: rgba(251, 191, 36, 0.13); }
 .badge-note:hover { background: rgba(251, 191, 36, 0.25); }
-.badge-empty { color: var(--text-3); opacity: 0.55; }
-.badge-empty:hover { opacity: 1; color: var(--text); background: rgba(255, 255, 255, 0.08); }
 .badge-link { color: #60a5fa; background: rgba(59, 130, 246, 0.13); }
 .badge-link:hover { background: rgba(59, 130, 246, 0.25); }
 
@@ -1475,7 +1473,10 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .editor-row { display: flex; gap: 6px; align-items: center; }
 .editor-row .edit-link { flex: 1; font-size: 12.5px; padding: 6px 10px; }
 
-.editor-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.editor-actions { display: flex; gap: 6px; align-items: center; }
+.editor-spacer { flex: 1; }
+.editor-note-btn { gap: 6px; }
+.editor-note-btn svg { width: 13px; height: 13px; }
 
 .btn-sm { padding: 6px 13px; font-size: 12.5px; }
 

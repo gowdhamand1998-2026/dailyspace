@@ -1675,8 +1675,7 @@ function sectionHtml(kind, label, items, placeholder) {
           ${item.tag ? `<span class="item-tag" style="--wt:${WIDGETS[item.tag].tint}" title="${WIDGETS[item.tag].label}">${WIDGETS[item.tag].icon}</span>` : ""}${escapeHtml(item.text)}
         </span>
         <span class="item-badges">
-          <button class="badge ${item.note ? "badge-note" : "badge-empty"}" data-notebtn
-            title="${item.note ? "Open note" : "Add a note"}">${NOTE_SVG}</button>
+          ${item.note ? `<button class="badge badge-note" data-notebtn title="Open doc">${NOTE_SVG}</button>` : ""}
           ${item.link ? `<a class="badge badge-link" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" title="${escapeHtml(item.link)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>` : ""}
         </span>
         <span class="item-actions">
@@ -1763,6 +1762,8 @@ function bindItemSection(kind, items, projectId) {
             placeholder="Link (optional)" maxlength="300" />
         </div>
         <div class="editor-actions">
+          <button class="btn btn-ghost btn-sm editor-note-btn" data-ed-note>${NOTE_SVG} ${item.note ? "Open doc" : "Add doc"}</button>
+          <span class="editor-spacer"></span>
           <button class="btn btn-ghost btn-sm" data-ed-cancel>Cancel</button>
           <button class="btn btn-primary btn-sm" data-ed-save>Save</button>
         </div>
@@ -1797,6 +1798,17 @@ function bindItemSection(kind, items, projectId) {
 
     li.querySelector("[data-ed-save]").addEventListener("click", save);
     li.querySelector("[data-ed-cancel]").addEventListener("click", rerender);
+    li.querySelector("[data-ed-note]").addEventListener("click", () => {
+      // keep whatever was typed, then jump into the doc
+      const text = textInput.value.trim();
+      if (text) item.text = text;
+      item.tag = editTag;
+      const url = linkInput.value.trim();
+      if (!url) delete item.link;
+      else item.link = /^https?:\/\//i.test(url) ? url : "https://" + url;
+      persist();
+      window.location.hash = `#/n/${projectId}/${kind}/${item.id}`;
+    });
     li.addEventListener("keydown", (e) => {
       if (e.key === "Enter") save();
       if (e.key === "Escape") rerender();
