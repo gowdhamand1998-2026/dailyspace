@@ -734,14 +734,51 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 }
 
 .projectpage-inner {
-  width: min(820px, 100%);
+  width: min(1040px, 100%);
   margin: 0 auto;
-  padding: 30px 24px 100px;
+  padding: 30px 28px 100px;
   user-select: text;
 }
 
 /* the notes feed: every written doc, one after another */
-.doc-feed { display: flex; flex-direction: column; gap: 16px; }
+.doc-feed { display: flex; flex-direction: column; gap: 14px; }
+
+#notes-feed { display: flex; flex-direction: column; gap: 14px; }
+
+.note-add { margin-top: 0; }
+
+/* free-flowing note cards — each grows with its content */
+.note-card {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 18px 20px 8px;
+  transition: border-color 0.15s;
+}
+.note-card:focus-within { border-color: var(--line-strong); }
+
+.note-card-text {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 14.5px;
+  line-height: 1.7;
+  resize: none;
+  overflow: hidden;
+  min-height: 24px;
+}
+.note-card-text:focus { background: transparent; border: none; box-shadow: none; }
+
+.note-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0 4px;
+}
+.note-date { font-size: 11px; color: var(--text-3); }
+.note-card .item-delete { opacity: 0; }
+.note-card:hover .item-delete { opacity: 1; }
 
 .doc-block {
   background: rgba(255, 255, 255, 0.045);

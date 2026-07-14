@@ -136,6 +136,12 @@ function ensureDefaults(s) {
     if (!p.goals) p.goals = [];
     if (!p.tasks) p.tasks = [];
     if (p.notes === undefined) p.notes = "";
+    // notes became a feed of individual note cards; migrate the old single field
+    if (!p.notesList) {
+      p.notesList = p.notes
+        ? [{ id: uid(), text: p.notes, createdAt: new Date().toISOString() }]
+        : [];
+    }
   });
   if (!s.widgets) s.widgets = {};
   if (!s.widgets.call) s.widgets.call = { x: 92, y: 9 };
@@ -2069,6 +2075,19 @@ function wireWidgetWindow(kind) {
 
 /* ---------- full-screen project page with tabs ---------- */
 
+function noteCardHtml(n) {
+  const d = new Date(n.createdAt);
+  const when = isNaN(d) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `
+    <div class="note-card" data-note="${n.id}">
+      <textarea class="note-card-text" placeholder="Write...">${escapeHtml(n.text)}</textarea>
+      <div class="note-card-foot">
+        <span class="note-date">${when}</span>
+        <button class="action-btn item-delete" data-delnote title="Delete note">&times;</button>
+      </div>
+    </div>`;
+}
+
 let projTab = "notes";
 let projTabFor = null; // which project the remembered tab belongs to
 
@@ -2093,11 +2112,9 @@ function renderProjectPage(id, tab) {
     ];
     body = `
       <div class="doc-feed">
-        <div class="panel panel-notes">
-          <div class="section-title">Project notes</div>
-          <textarea class="notes-area" id="pj-notes"
-            placeholder="Ideas, links, anything...">${escapeHtml(p.notes)}</textarea>
-          <div class="save-hint" id="save-hint">&nbsp;</div>
+        <button class="crow crow-add note-add" data-add-note>+ Add a note</button>
+        <div id="notes-feed">
+          ${p.notesList.map((n) => noteCardHtml(n)).join("")}
         </div>
         ${docs.map(({ item, kind }) => `
           <article class="doc-block" data-opendoc="${kind}:${item.id}" title="Open in the editor">
@@ -2105,7 +2122,6 @@ function renderProjectPage(id, tab) {
             <div class="doc-body">${item.note}</div>
           </article>
         `).join("")}
-        ${docs.length ? "" : `<div class="empty-hint picker-empty">No docs written yet — open a task's editor and hit "Add doc".</div>`}
       </div>`;
   } else if (projTab === "work") {
     body = `
@@ -2194,19 +2210,44 @@ function wireProjectPage(id) {
 
   // tab-specific wiring
   if (projTab === "notes") {
-    const notes = page.querySelector("#pj-notes");
-    const hint = page.querySelector("#save-hint");
-    let timer = null;
-    notes.addEventListener("input", () => {
-      clearTimeout(timer);
-      hint.textContent = "typing...";
-      timer = setTimeout(() => {
-        p.notes = notes.value;
+    const feed = page.querySelector("#notes-feed");
+
+    function autogrow(ta) {
+      ta.style.height = "auto";
+      ta.style.height = ta.scrollHeight + "px";
+    }
+
+    function wireNoteCard(card) {
+      const note = p.notesList.find((n) => n.id === card.dataset.note);
+      const ta = card.querySelector(".note-card-text");
+      autogrow(ta);
+      let timer = null;
+      ta.addEventListener("input", () => {
+        autogrow(ta);
+        clearTimeout(timer);
+        timer = setTimeout(() => { note.text = ta.value; persist(); }, 500);
+      });
+      ta.addEventListener("blur", () => { note.text = ta.value; persist(); });
+      card.querySelector("[data-delnote]").addEventListener("click", () => {
+        p.notesList = p.notesList.filter((n) => n.id !== note.id);
         persist();
-        hint.textContent = "saved";
-        setTimeout(() => (hint.innerHTML = "&nbsp;"), 1500);
-      }, 500);
+        card.remove(); // in place, no flash
+      });
+    }
+
+    feed.querySelectorAll(".note-card").forEach(wireNoteCard);
+
+    // "+ Add a note" → a fresh card appears at the top, ready to type
+    page.querySelector("[data-add-note]").addEventListener("click", () => {
+      const n = { id: uid(), text: "", createdAt: new Date().toISOString() };
+      p.notesList.unshift(n);
+      persist();
+      const card = elFromHtml(noteCardHtml(n));
+      feed.prepend(card);
+      wireNoteCard(card);
+      card.querySelector(".note-card-text").focus();
     });
+
     page.querySelectorAll("[data-opendoc]").forEach((el) => {
       el.addEventListener("click", () => {
         const [kind, itemId] = el.dataset.opendoc.split(":");
