@@ -1414,6 +1414,14 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 }
 .crow:hover { background: rgba(255, 255, 255, 0.06); }
 
+/* link rows are anchors — keep them in the design's ink, never browser blue */
+a.crow, a.crow:visited {
+  color: var(--text);
+  text-decoration: none;
+}
+a.crow .crow-name { color: var(--text); }
+a.crow:hover .crow-name { color: #fff; }
+
 .crow-thumb {
   flex-shrink: 0;
   width: 38px;
