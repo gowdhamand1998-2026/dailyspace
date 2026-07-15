@@ -2168,27 +2168,12 @@ let projTabFor = null; // which project the remembered tab belongs to
 /* content of the currently selected tab */
 function projTabBodyHtml(p) {
   if (projTab === "notes") {
-    const docs = [
-      ...p.docs.map((d) => ({ item: d, kind: "docs" })),
-      ...p.tasks.filter((t) => t.note).map((t) => ({ item: t, kind: "tasks" })),
-      ...p.goals.filter((g) => g.note).map((g) => ({ item: g, kind: "goals" })),
-    ];
     return `
       <div class="doc-feed">
-        <div class="add-duo">
-          <button class="crow crow-add note-add" data-add-note>+ Add a note</button>
-          <button class="crow crow-add note-add" data-add-doc>+ Add a doc</button>
-        </div>
+        <button class="crow crow-add note-add" data-add-note>+ Add a note</button>
         <div id="notes-feed">
           ${p.notesList.map((n) => noteCardHtml(n)).join("")}
         </div>
-        ${docs.map(({ item, kind }) => `
-          <article class="doc-block" data-opendoc="${kind}:${item.id}" title="Open in the editor">
-            ${kind === "docs" ? `<button class="doc-del" data-deldoc="${item.id}" title="Delete doc">&times;</button>` : ""}
-            <h3>${escapeHtml(item.text)}</h3>
-            <div class="doc-body">${item.note || `<span class="empty-hint">Empty doc — click to write.</span>`}</div>
-          </article>
-        `).join("")}
       </div>`;
   }
   if (projTab === "work") {
@@ -2200,7 +2185,22 @@ function projTabBodyHtml(p) {
   const hostOf = (url) => {
     try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
   };
+  const docs = [
+    ...p.docs.map((d) => ({ item: d, kind: "docs" })),
+    ...p.tasks.filter((t) => t.note).map((t) => ({ item: t, kind: "tasks" })),
+    ...p.goals.filter((g) => g.note).map((g) => ({ item: g, kind: "goals" })),
+  ];
   return `
+    <div class="doc-feed" style="margin-bottom:16px;">
+      <button class="crow crow-add note-add" data-add-doc>+ Add a doc</button>
+      ${docs.map(({ item, kind }) => `
+        <article class="doc-block" data-opendoc="${kind}:${item.id}" title="Open in the editor">
+          ${kind === "docs" ? `<button class="doc-del" data-deldoc="${item.id}" title="Delete doc">&times;</button>` : ""}
+          <h3>${escapeHtml(item.text)}</h3>
+          <div class="doc-body">${item.note || `<span class="empty-hint">Empty doc — click to write.</span>`}</div>
+        </article>
+      `).join("")}
+    </div>
     <div class="panel">
       <div class="section-title">Links</div>
       <div class="collection-list" style="padding-top:6px;">
@@ -2226,7 +2226,7 @@ function projTabBodyHtml(p) {
 const PROJ_TABS = [
   { key: "notes", label: "Notes" },
   { key: "work", label: "Goals & Tasks" },
-  { key: "links", label: "Links" },
+  { key: "links", label: "Docs / Links" },
 ];
 
 function renderProjectPage(id, tab) {
@@ -2391,6 +2391,10 @@ function wireTabContent(id, page) {
 
     });
 
+  } else if (projTab === "work") {
+    bindItemSection("goals", p.goals, id);
+    bindItemSection("tasks", p.tasks, id);
+  } else if (projTab === "links") {
     // "+ Add a doc" → a fresh standalone doc, straight into the editor
     page.querySelector("[data-add-doc]").addEventListener("click", () => {
       const d = { id: uid(), text: "Untitled doc", note: "", createdAt: new Date().toISOString() };
@@ -2415,10 +2419,7 @@ function wireTabContent(id, page) {
         btn.closest(".doc-block").remove(); // in place
       });
     });
-  } else if (projTab === "work") {
-    bindItemSection("goals", p.goals, id);
-    bindItemSection("tasks", p.tasks, id);
-  } else if (projTab === "links") {
+
     page.querySelector("[data-add-plink]").addEventListener("click", () => showAddProjectLinkModal(p, id, page));
     page.querySelectorAll("[data-del-plink]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
