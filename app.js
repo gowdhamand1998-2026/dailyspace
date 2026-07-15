@@ -142,8 +142,24 @@ function ensureDefaults(s) {
         ? [{ id: uid(), text: p.notes, createdAt: new Date().toISOString() }]
         : [];
     }
-    if (!p.docs) p.docs = [];   // standalone project docs
+    if (!p.docs) p.docs = [];   // (legacy) standalone project docs
     if (!p.links) p.links = []; // project-level links
+
+    // recover any orphaned docs: they become note cards in the Notes tab
+    if (p.docs.length) {
+      p.docs.forEach((d) => {
+        const body = (d.note || "").trim();
+        const title = (d.text || "").trim();
+        if (!body && (!title || title === "Untitled doc")) return; // truly empty
+        const heading = title && title !== "Untitled doc" ? `<b>${escapeHtml(title)}</b><br>` : "";
+        p.notesList.unshift({
+          id: uid(),
+          text: heading + (body || ""),
+          createdAt: d.createdAt || new Date().toISOString(),
+        });
+      });
+      p.docs = [];
+    }
   });
   if (!s.widgets) s.widgets = {};
   if (!s.widgets.call) s.widgets.call = { x: 92, y: 9 };
