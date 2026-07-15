@@ -2185,24 +2185,9 @@ function projTabBodyHtml(p) {
   const hostOf = (url) => {
     try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
   };
-  const docs = [
-    ...p.docs.map((d) => ({ item: d, kind: "docs" })),
-    ...p.tasks.filter((t) => t.note).map((t) => ({ item: t, kind: "tasks" })),
-    ...p.goals.filter((g) => g.note).map((g) => ({ item: g, kind: "goals" })),
-  ];
   return `
-    <div class="doc-feed" style="margin-bottom:16px;">
-      <button class="crow crow-add note-add" data-add-doc>+ Add a doc</button>
-      ${docs.map(({ item, kind }) => `
-        <article class="doc-block" data-opendoc="${kind}:${item.id}" title="Open in the editor">
-          ${kind === "docs" ? `<button class="doc-del" data-deldoc="${item.id}" title="Delete doc">&times;</button>` : ""}
-          <h3>${escapeHtml(item.text)}</h3>
-          <div class="doc-body">${item.note || `<span class="empty-hint">Empty doc — click to write.</span>`}</div>
-        </article>
-      `).join("")}
-    </div>
     <div class="panel">
-      <div class="section-title">Links</div>
+      <div class="section-title">Docs / Links</div>
       <div class="collection-list" style="padding-top:6px;">
         <button class="crow crow-add" data-add-plink>+ Add link</button>
         ${p.links.map((l) => `
@@ -2395,31 +2380,6 @@ function wireTabContent(id, page) {
     bindItemSection("goals", p.goals, id);
     bindItemSection("tasks", p.tasks, id);
   } else if (projTab === "links") {
-    // "+ Add a doc" → a fresh standalone doc, straight into the editor
-    page.querySelector("[data-add-doc]").addEventListener("click", () => {
-      const d = { id: uid(), text: "Untitled doc", note: "", createdAt: new Date().toISOString() };
-      p.docs.unshift(d);
-      persist();
-      window.location.hash = `#/n/${id}/docs/${d.id}`;
-    });
-
-    page.querySelectorAll("[data-opendoc]").forEach((el) => {
-      el.addEventListener("click", (e) => {
-        if (e.target.closest("[data-deldoc]")) return;
-        const [kind, itemId] = el.dataset.opendoc.split(":");
-        window.location.hash = `#/n/${id}/${kind}/${itemId}`;
-      });
-    });
-
-    page.querySelectorAll("[data-deldoc]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        if (!confirm("Delete this doc?")) return;
-        p.docs = p.docs.filter((d) => d.id !== btn.dataset.deldoc);
-        persist();
-        btn.closest(".doc-block").remove(); // in place
-      });
-    });
-
     page.querySelector("[data-add-plink]").addEventListener("click", () => showAddProjectLinkModal(p, id, page));
     page.querySelectorAll("[data-del-plink]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
