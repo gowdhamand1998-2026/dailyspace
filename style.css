@@ -786,6 +786,32 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 
 .note-add { margin-top: 0; }
 
+.add-duo { display: flex; gap: 10px; }
+.add-duo .crow-add { flex: 1; margin-top: 0; }
+
+/* delete on standalone project docs */
+.doc-block { position: relative; }
+.doc-del {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  z-index: 1;
+}
+.doc-block:hover .doc-del { opacity: 1; }
+.doc-del:hover { color: #f87171; background: rgba(248, 113, 113, 0.12); }
+
 /* free-flowing note cards — each grows with its content */
 .note-card {
   background: rgba(255, 255, 255, 0.045);

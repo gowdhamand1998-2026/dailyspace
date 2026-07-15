@@ -142,6 +142,8 @@ function ensureDefaults(s) {
         ? [{ id: uid(), text: p.notes, createdAt: new Date().toISOString() }]
         : [];
     }
+    if (!p.docs) p.docs = [];   // standalone project docs
+    if (!p.links) p.links = []; // project-level links
   });
   if (!s.widgets) s.widgets = {};
   if (!s.widgets.call) s.widgets.call = { x: 92, y: 9 };
@@ -522,7 +524,7 @@ function route() {
   if (wMatch) { renderDesktop(null, wMatch[1]); return; }
 
   // full-page note for a task/goal
-  const nMatch = window.location.hash.match(/^#\/n\/([^/]+)\/(goals|tasks)\/(.+)$/);
+  const nMatch = window.location.hash.match(/^#\/n\/([^/]+)\/(goals|tasks|docs)\/(.+)$/);
   if (nMatch) {
     const np = getProject(nMatch[1]);
     const nItem = np && np[nMatch[2]].find((i) => i.id === nMatch[3]);
@@ -2167,19 +2169,24 @@ let projTabFor = null; // which project the remembered tab belongs to
 function projTabBodyHtml(p) {
   if (projTab === "notes") {
     const docs = [
+      ...p.docs.map((d) => ({ item: d, kind: "docs" })),
       ...p.tasks.filter((t) => t.note).map((t) => ({ item: t, kind: "tasks" })),
       ...p.goals.filter((g) => g.note).map((g) => ({ item: g, kind: "goals" })),
     ];
     return `
       <div class="doc-feed">
-        <button class="crow crow-add note-add" data-add-note>+ Add a note</button>
+        <div class="add-duo">
+          <button class="crow crow-add note-add" data-add-note>+ Add a note</button>
+          <button class="crow crow-add note-add" data-add-doc>+ Add a doc</button>
+        </div>
         <div id="notes-feed">
           ${p.notesList.map((n) => noteCardHtml(n)).join("")}
         </div>
         ${docs.map(({ item, kind }) => `
           <article class="doc-block" data-opendoc="${kind}:${item.id}" title="Open in the editor">
+            ${kind === "docs" ? `<button class="doc-del" data-deldoc="${item.id}" title="Delete doc">&times;</button>` : ""}
             <h3>${escapeHtml(item.text)}</h3>
-            <div class="doc-body">${item.note}</div>
+            <div class="doc-body">${item.note || `<span class="empty-hint">Empty doc — click to write.</span>`}</div>
           </article>
         `).join("")}
       </div>`;
@@ -2190,21 +2197,28 @@ function projTabBodyHtml(p) {
       ${sectionHtml("tasks", "Tasks", p.tasks, "Add a task...")}`;
   }
   const linked = [...p.tasks, ...p.goals].filter((t) => t.link);
+  const hostOf = (url) => {
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
+  };
   return `
     <div class="panel">
       <div class="section-title">Links</div>
       <div class="collection-list" style="padding-top:6px;">
-        ${linked.map((t) => {
-          let host = "";
-          try { host = new URL(t.link).hostname.replace(/^www\./, ""); } catch {}
-          return `
+        <button class="crow crow-add" data-add-plink>+ Add link</button>
+        ${p.links.map((l) => `
+          <a class="crow" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">
+            <span class="crow-thumb crow-linkthumb"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>
+            <span class="crow-name">${escapeHtml(l.name)}</span>
+            <span class="crow-kind">${escapeHtml(hostOf(l.url))}</span>
+            <button class="crow-remove" data-del-plink="${l.id}" data-tip="Remove link">&times;</button>
+          </a>`).join("")}
+        ${linked.map((t) => `
             <a class="crow" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">
               <span class="crow-thumb crow-linkthumb"><img src="${linkIconSrc(t.link)}" alt="" onerror="this.style.display='none'" /></span>
               <span class="crow-name">${escapeHtml(t.text)}</span>
-              <span class="crow-kind">${escapeHtml(host)}</span>
-            </a>`;
-        }).join("")}
-        ${linked.length ? "" : `<div class="empty-hint picker-empty">No links yet — attach one from a task's editor.</div>`}
+              <span class="crow-kind">${escapeHtml(hostOf(t.link))}</span>
+            </a>`).join("")}
+        ${linked.length || p.links.length ? "" : `<div class="empty-hint picker-empty">No links yet.</div>`}
       </div>
     </div>`;
 }
@@ -2377,16 +2391,97 @@ function wireTabContent(id, page) {
 
     });
 
+    // "+ Add a doc" → a fresh standalone doc, straight into the editor
+    page.querySelector("[data-add-doc]").addEventListener("click", () => {
+      const d = { id: uid(), text: "Untitled doc", note: "", createdAt: new Date().toISOString() };
+      p.docs.unshift(d);
+      persist();
+      window.location.hash = `#/n/${id}/docs/${d.id}`;
+    });
+
     page.querySelectorAll("[data-opendoc]").forEach((el) => {
-      el.addEventListener("click", () => {
+      el.addEventListener("click", (e) => {
+        if (e.target.closest("[data-deldoc]")) return;
         const [kind, itemId] = el.dataset.opendoc.split(":");
         window.location.hash = `#/n/${id}/${kind}/${itemId}`;
+      });
+    });
+
+    page.querySelectorAll("[data-deldoc]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!confirm("Delete this doc?")) return;
+        p.docs = p.docs.filter((d) => d.id !== btn.dataset.deldoc);
+        persist();
+        btn.closest(".doc-block").remove(); // in place
       });
     });
   } else if (projTab === "work") {
     bindItemSection("goals", p.goals, id);
     bindItemSection("tasks", p.tasks, id);
+  } else if (projTab === "links") {
+    page.querySelector("[data-add-plink]").addEventListener("click", () => showAddProjectLinkModal(p, id, page));
+    page.querySelectorAll("[data-del-plink]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!confirm("Remove this link?")) return;
+        p.links = p.links.filter((x) => x.id !== btn.dataset.delPlink);
+        persist();
+        btn.closest(".crow").remove(); // in place
+      });
+    });
   }
+}
+
+/* small modal: add a link directly to the project */
+function showAddProjectLinkModal(p, id, page) {
+  const backdrop = document.createElement("div");
+  backdrop.className = "window-backdrop";
+  backdrop.innerHTML = `
+    <div class="new-form">
+      <h3>Add link</h3>
+      <input type="text" id="pl-name" placeholder="Name" maxlength="60" />
+      <input type="text" id="pl-url" placeholder="URL (e.g. figma.com/file/…)" maxlength="500" />
+      <div class="row">
+        <button class="btn btn-ghost" id="pl-cancel">Cancel</button>
+        <button class="btn btn-primary" id="pl-add">Add</button>
+      </div>
+    </div>
+  `;
+  app.appendChild(backdrop);
+
+  const nameInput = backdrop.querySelector("#pl-name");
+  const urlInput = backdrop.querySelector("#pl-url");
+  nameInput.focus();
+
+  function close() { backdrop.remove(); }
+
+  function add() {
+    const name = nameInput.value.trim();
+    let url = urlInput.value.trim();
+    if (!url) { urlInput.focus(); return; }
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    try { new URL(url); } catch { urlInput.focus(); return; }
+
+    let host = "";
+    try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+    p.links.unshift({ id: uid(), name: name || host, url });
+    persist();
+    close();
+    // refresh just the tab content — same seamless swap as tab switching
+    const inner = page.querySelector(".projectpage-inner");
+    inner.innerHTML = projTabBodyHtml(p);
+    wireTabContent(id, page);
+  }
+
+  backdrop.querySelector("#pl-add").addEventListener("click", add);
+  backdrop.querySelector("#pl-cancel").addEventListener("click", close);
+  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") add();
+    if (e.key === "Escape") close();
+  });
 }
 
 /* Builds the HTML for a checkable list panel (goals or tasks) */
