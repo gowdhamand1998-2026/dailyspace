@@ -51,42 +51,13 @@ function defaultPos(i) {
 }
 
 function seedData() {
-  const g = (text, done = false) => ({ id: uid(), text, done });
+  const g = (text, done = false) => ({
+    id: uid(), text, done,
+    createdAt: new Date().toISOString(),
+    ...(done ? { closedAt: new Date().toISOString() } : {}),
+  });
   return {
     projects: [
-      {
-        id: uid(),
-        name: "DailySpace Website",
-        description: "This very site — a calm hub for all my projects.",
-        focus: "Make it feel like a desktop, not a document",
-        goals: [g("Launch on localhost", true), g("Push to GitHub"), g("Hook up a real database")],
-        tasks: [
-          g("Sketch the hub layout", true),
-          g("Build project pages", true),
-          g("Desktop-OS redesign", true),
-          g("Set up a GitHub repo"),
-          g("Deploy a live version"),
-        ],
-        notes: "Inspired by the Makos Framer template — scattered icons, selection states, dock.\n\nLater: swap the Store object for an API + database.",
-        pos: { x: 18, y: 30 },
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: uid(),
-        name: "Fitness & Health",
-        description: "Consistent training and better sleep, one week at a time.",
-        focus: "Run 5k without stopping",
-        goals: [g("Run a 5k by September"), g("Sleep 7+ hours on weekdays", true)],
-        tasks: [
-          g("Morning run — Mon/Wed/Fri", true),
-          g("Meal prep on Sundays", true),
-          g("Book a dental checkup"),
-          g("Try one yoga session"),
-        ],
-        notes: "Week 3 of the couch-to-5k plan. Knees feel fine, pace ~7:30/km.",
-        pos: { x: 45, y: 55 },
-        createdAt: new Date().toISOString(),
-      },
       {
         id: uid(),
         name: "Learn System Design",
@@ -145,6 +116,16 @@ function ensureDefaults(s) {
     if (!p.docs) p.docs = [];   // (legacy) standalone project docs
     if (!p.links) p.links = []; // project-level links
 
+    // timestamps: every task/goal gets a createdAt; every done one gets a closedAt
+    [...p.goals, ...p.tasks].forEach((t) => {
+      if (!t.createdAt) t.createdAt = new Date().toISOString();
+      if (t.done && !t.closedAt) t.closedAt = new Date().toISOString();
+    });
+    p.notesList.forEach((n) => {
+      if (!n.createdAt) n.createdAt = p.createdAt || new Date().toISOString();
+      if (!n.updatedAt) n.updatedAt = n.createdAt;
+    });
+
     // recover any orphaned docs: they become note cards in the Notes tab
     if (p.docs.length) {
       p.docs.forEach((d) => {
@@ -186,6 +167,76 @@ function ensureDefaults(s) {
   if (!s.mePos) s.mePos = { x: 50, y: 47 };
   if (!s.period) s.period = "day";
   if (s.timebarHidden === undefined) s.timebarHidden = false;
+
+  // ---- timestamp cleanups: pinned to ABSOLUTE dates (never "the current
+  // week", which shifts under our feet at midnight) ----
+  // time-tracking shipped during the week of Jul 13–19, 2026; anything from
+  // before it is anchored to that Sunday night
+  const TRACK_START = new Date(2026, 6, 13);
+  const ANCHOR = new Date(2026, 6, 19, 23, 59, 0).toISOString(); // Sun Jul 19, 11:59 PM
+
+  if (!s.tsNormalized) {
+    s.projects.forEach((p) =>
+      [...p.goals, ...p.tasks].forEach((t) => {
+        if (new Date(t.createdAt) < TRACK_START) t.createdAt = ANCHOR;
+        if (t.done && (!t.closedAt || new Date(t.closedAt) < TRACK_START)) t.closedAt = ANCHOR;
+      })
+    );
+    s.tsNormalized = true;
+  }
+
+  // repair: an earlier version of the cleanup above keyed off "this week", so
+  // if it first ran on/after Mon Jul 20 it overwrote last week's real
+  // timestamps with that moment — leaving batches of items sharing one
+  // identical machine stamp. Real creations never share the same second, so
+  // groups of 2+ identical stamps on/after Jul 20 are the fingerprint:
+  // send them back to the Sunday anchor where they belong.
+  if (!s.tsRepaired) {
+    const cutoff = new Date(2026, 6, 20);
+    const bySecond = {};
+    const key = (iso) => iso.slice(0, 19);
+    s.projects.forEach((p) =>
+      [...p.goals, ...p.tasks].forEach((t) => {
+        [t.createdAt, t.closedAt].forEach((iso) => {
+          if (iso && new Date(iso) >= cutoff) bySecond[key(iso)] = (bySecond[key(iso)] || 0) + 1;
+        });
+      })
+    );
+    s.projects.forEach((p) =>
+      [...p.goals, ...p.tasks].forEach((t) => {
+        if (t.createdAt && new Date(t.createdAt) >= cutoff && bySecond[key(t.createdAt)] > 1) t.createdAt = ANCHOR;
+        if (t.closedAt && new Date(t.closedAt) >= cutoff && bySecond[key(t.closedAt)] > 1) t.closedAt = ANCHOR;
+      })
+    );
+    s.tsRepaired = true;
+  }
+
+  // one-time cleanup: legacy notes inherited guessed dates from before
+  // time-tracking existed — anchor them to the Sunday that tracking arrived,
+  // so they belong to that week's report
+  if (!s.notesAnchored) {
+    s.projects.forEach((p) =>
+      p.notesList.forEach((n) => {
+        if (new Date(n.createdAt) < TRACK_START) n.createdAt = ANCHOR;
+        if (n.updatedAt && new Date(n.updatedAt) < new Date(n.createdAt)) n.updatedAt = n.createdAt;
+      })
+    );
+    s.notesAnchored = true;
+  }
+
+  // one-time cleanup: drop the sample projects — real records only
+  if (!s.seedPurged) {
+    const drop = new Set(["DailySpace Website", "Fitness & Health"]);
+    const ids = s.projects.filter((p) => drop.has(p.name)).map((p) => p.id);
+    if (ids.length) {
+      s.projects = s.projects.filter((p) => !ids.includes(p.id));
+      s.collections.forEach((c) => {
+        c.items = c.items.filter((i) => !(i.type === "project" && ids.includes(i.id)));
+      });
+      s.archived = s.archived.filter((a) => !(a.type === "project" && ids.includes(a.id)));
+    }
+    s.seedPurged = true;
+  }
   return s;
 }
 
@@ -343,6 +394,61 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+/* full timestamp: "Jul 19, 2026 · 9:41 PM" */
+function fmtDT(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  return (
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+    " · " +
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  );
+}
+
+/* single source of truth for completing / reopening a task or goal:
+   stamps closedAt on completion, clears it on reopen */
+function setDone(item, done) {
+  item.done = done;
+  if (done) item.closedAt = new Date().toISOString();
+  else delete item.closedAt;
+}
+
+/* compact, context-aware timestamp: "9:41 PM" today, "Yesterday, 9:41 PM",
+   "Jul 12, 9:41 PM" this year, "Jul 12, 2025, 9:41 PM" beyond */
+function smartDT(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  const now = new Date();
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const sameDay = (a, b) => a.toDateString() === b.toDateString();
+  if (sameDay(d, now)) return time;
+  const yest = new Date(now);
+  yest.setDate(now.getDate() - 1);
+  if (sameDay(d, yest)) return "Yesterday, " + time;
+  const opts = { month: "short", day: "numeric" };
+  if (d.getFullYear() !== now.getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString("en-US", opts) + ", " + time;
+}
+
+/* meta line under a task/goal: created time + closed time */
+function itemMetaHtml(item) {
+  const bits = [];
+  if (item.createdAt) bits.push(`<span class="meta-chip" title="Created">＋ ${fmtDT(item.createdAt)}</span>`);
+  if (item.done && item.closedAt) bits.push(`<span class="meta-chip meta-closed" title="Completed">✓ ${fmtDT(item.closedAt)}</span>`);
+  return bits.join("");
+}
+
+/* one quiet stamp per note: the most recent event wins, hover reveals both */
+function noteStampHtml(n) {
+  if (!n.createdAt) return "";
+  const edited = n.updatedAt && n.updatedAt !== n.createdAt;
+  const tip = `Created ${fmtDT(n.createdAt)}${edited ? `&#10;Edited ${fmtDT(n.updatedAt)}` : ""}`;
+  return `<span class="stamp" title="${tip}">
+    <span class="stamp-part">Created ${smartDT(n.createdAt)}</span>
+    ${edited ? `<span class="stamp-part">Edited ${smartDT(n.updatedAt)}</span>` : ""}
+  </span>`;
+}
+
 /* favicon chain. faviconV2 returns a real 404 when a site has no icon
    (unlike the old s2 endpoint, which sent back a fake globe), so any
    image that loads is the site's genuine icon — at whatever size exists.
@@ -422,6 +528,9 @@ const ICONS = {
   shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>',
   archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>',
   users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  review: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M3 10h18"/><path d="M8 15h4M8 18h7"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
 };
 
 function initials(name) {
@@ -549,6 +658,7 @@ function route() {
 
   if (window.location.hash === "#/a") { renderDesktop(null, null, null, true); return; }
   if (window.location.hash === "#/people") { renderPeoplePage(); return; }
+  if (window.location.hash === "#/review") { renderReviewPage(); return; }
 
   const cMatch = window.location.hash.match(/^#\/c\/(.+)$/);
   if (cMatch && state.collections.find((c) => c.id === cMatch[1])) {
@@ -807,6 +917,8 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
         <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="Tidy icons" data-dock-tidy>${ICONS.shuffle}</button>
         <div class="dock-sep"></div>
+        <button class="dock-btn" data-tip="Review" data-dock-review>${ICONS.review}</button>
+        <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="Archive" data-archive>${ICONS.archive}
           ${state.archived.length ? `<span class="archive-count">${state.archived.length}</span>` : ""}
         </button>
@@ -863,6 +975,7 @@ function wireDesktop() {
 
   // dock
   app.querySelector("[data-dock-add]").addEventListener("click", showAddChooser);
+  app.querySelector("[data-dock-review]").addEventListener("click", () => (window.location.hash = "#/review"));
   app.querySelector("[data-dock-tidy]").addEventListener("click", () => {
     if (IS_MOBILE) {
       // phones have their own layout — tidy only touches the mobile grid
@@ -1652,7 +1765,7 @@ function wirePersonPanel() {
       state.projects.forEach((p) => {
         const t = p.tasks.find((x) => x.id === taskId);
         if (t) {
-          t.done = !t.done;
+          setDone(t, !t.done);
           btn.closest(".item").classList.toggle("done", t.done);
         }
       });
@@ -2136,7 +2249,7 @@ function wireWidgetWindow(kind) {
       let toggled = null;
       state.projects.forEach((p) => {
         const t = p[source].find((x) => x.id === taskId);
-        if (t) { t.done = !t.done; toggled = t; }
+        if (t) { setDone(t, !t.done); toggled = t; }
       });
       persist();
       if (toggled) btn.closest(".item").classList.toggle("done", toggled.done);
@@ -2160,8 +2273,6 @@ function noteBodyHtml(text) {
 }
 
 function noteCardHtml(n) {
-  const d = new Date(n.createdAt);
-  const when = isNaN(d) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return `
     <div class="note-card" data-note="${n.id}">
       <div class="note-card-text" contenteditable="true" data-ph="Write...">${noteBodyHtml(n.text)}</div>
@@ -2172,7 +2283,7 @@ function noteCardHtml(n) {
           <button class="fmt-btn" data-cmd="underline" title="Underline"><u>U</u></button>
           <button class="fmt-btn" data-cmd="insertUnorderedList" title="Bullet list">&bull; List</button>
         </div>
-        <span class="note-date">${when}</span>
+        <span class="note-date">${noteStampHtml(n)}</span>
         <button class="action-btn item-delete" data-delnote title="Delete note">&times;</button>
       </div>
     </div>`;
@@ -2350,8 +2461,13 @@ function wireTabContent(id, page) {
       const editor = card.querySelector(".note-card-text");
 
       function saveNote() {
-        note.text = editor.textContent.trim() ? editor.innerHTML : "";
+        const next = editor.textContent.trim() ? editor.innerHTML : "";
+        if (next === note.text) return; // nothing changed — don't bump the edit time
+        note.text = next;
+        note.updatedAt = new Date().toISOString();
         persist();
+        const stamp = card.querySelector(".note-date");
+        if (stamp) stamp.innerHTML = noteStampHtml(note);
       }
 
       let timer = null;
@@ -2466,8 +2582,11 @@ function itemRowHtml(item) {
   return `
       <li class="item ${item.done ? "done" : ""}" data-id="${item.id}">
         <button class="item-check" data-toggle title="Toggle">${CHECK_SVG}</button>
-        <span class="item-text" data-edit title="Click to edit">
-          ${item.tag ? `<span class="item-tag" style="--wt:${WIDGETS[item.tag].tint}" title="${WIDGETS[item.tag].label}">${WIDGETS[item.tag].icon}</span>` : ""}${escapeHtml(item.text)}
+        <span class="item-main">
+          <span class="item-text" data-edit title="Click to edit">
+            ${item.tag ? `<span class="item-tag" style="--wt:${WIDGETS[item.tag].tint}" title="${WIDGETS[item.tag].label}">${WIDGETS[item.tag].icon}</span>` : ""}${escapeHtml(item.text)}
+          </span>
+          <span class="item-meta">${itemMetaHtml(item)}</span>
         </span>
         <span class="item-badges">
           ${item.note ? `<button class="badge badge-note" data-notebtn title="Open doc">${NOTE_SVG}</button>` : ""}
@@ -2551,7 +2670,7 @@ function bindItemSection(kind, items, projectId) {
   function add() {
     const text = input.value.trim();
     if (!text) return;
-    const item = { id: uid(), text, done: false, tag: selectedTag };
+    const item = { id: uid(), text, done: false, tag: selectedTag, createdAt: new Date().toISOString() };
     items.push(item);
     persist();
 
@@ -2671,9 +2790,11 @@ function bindItemSection(kind, items, projectId) {
   function wireItem(li, item) {
     // completing is seamless: no re-render, just animate the state in place
     li.querySelector("[data-toggle]").addEventListener("click", () => {
-      item.done = !item.done;
+      setDone(item, !item.done);
       persist();
       li.classList.toggle("done", item.done);
+      const metaEl = li.querySelector(".item-meta");
+      if (metaEl) metaEl.innerHTML = itemMetaHtml(item);
       updateCount();
     });
     li.querySelector("[data-delete]").addEventListener("click", () => {
@@ -2701,4 +2822,459 @@ function bindItemSection(kind, items, projectId) {
     const item = items.find((i) => i.id === li.dataset.id);
     wireItem(li, item);
   });
+}
+
+/* ---------- 5. REVIEW — period report of goals / tasks / notes ---------- */
+
+let reviewMode = "week";                 // "week" | "month" | "custom"
+let reviewFrom = null, reviewTo = null;  // "YYYY-MM-DD" for custom
+
+function reviewRange() {
+  if (reviewMode === "custom" && reviewFrom && reviewTo) {
+    const start = new Date(reviewFrom + "T00:00:00");
+    const end = new Date(reviewTo + "T00:00:00");
+    end.setDate(end.getDate() + 1); // end date is inclusive
+    if (end > start) return { start, end };
+  }
+  if (reviewMode === "lastweek") {
+    const { start } = periodRange("week");
+    const s = new Date(start);
+    s.setDate(s.getDate() - 7);
+    return { start: s, end: start };
+  }
+  return periodRange(reviewMode === "month" ? "month" : "week");
+}
+
+function rangeLabel(start, end) {
+  const shown = new Date(end.getTime() - 1);
+  const f = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return `${f(start)} – ${f(shown)}`;
+}
+
+/* everything that happened in [start, end), grouped by project */
+function reviewData(start, end) {
+  const inR = (iso) => {
+    if (!iso) return false;
+    const t = new Date(iso);
+    return t >= start && t < end;
+  };
+  const sect = (items) => {
+    // Sunday-report semantics: include everything that was ON THE PLATE during
+    // the period — created in it, completed in it, or still open at its end
+    // (carried over from earlier). Only items already closed before the period
+    // began stay out. snapDone = status AS OF the period's end — completing
+    // something later never rewrites an earlier week's report.
+    const doneAsOf = (t) => !!(t.done && t.closedAt && new Date(t.closedAt) < end);
+    const closedBefore = (t) => !!(t.done && t.closedAt && new Date(t.closedAt) < start);
+    const rows = items
+      .filter((t) => new Date(t.createdAt) < end && !closedBefore(t))
+      .map((t) => ({ ...t, snapDone: doneAsOf(t) }));
+    return {
+      rows,
+      created: rows.filter((t) => inR(t.createdAt)).length,
+      completed: rows.filter((t) => t.done && inR(t.closedAt)).length,
+      pending: rows.filter((t) => !t.snapDone).length,
+    };
+  };
+  const out = [];
+  state.projects.forEach((p) => {
+    const goals = sect(p.goals);
+    const tasks = sect(p.tasks);
+    const notes = p.notesList.filter(
+      (n) => inR(n.createdAt) && (n.text || "").replace(/<[^>]*>/g, "").trim()
+    );
+    if (goals.rows.length || tasks.rows.length || notes.length) {
+      out.push({ p, goals, tasks, notes, archived: isArchived("project", p.id) });
+    }
+  });
+  return out;
+}
+
+function noteSnippet(n) {
+  const div = document.createElement("div");
+  div.innerHTML = noteBodyHtml(n.text);
+  const txt = div.textContent.trim().replace(/\s+/g, " ");
+  return txt.length > 160 ? txt.slice(0, 160) + "…" : txt || "(empty note)";
+}
+
+function revItemRowHtml(t) {
+  return `
+    <li class="rev-item ${t.snapDone ? "done" : ""}">
+      <span class="rev-status">${t.snapDone ? "✓" : "○"}</span>
+      <span class="rev-text">${escapeHtml(t.text)}</span>
+      <span class="rev-times">
+        <span title="Created">＋ ${fmtDT(t.createdAt)}</span>
+        ${t.snapDone ? `<span class="rev-closed" title="Completed">✓ ${fmtDT(t.closedAt)}</span>` : `<span class="rev-pending">pending</span>`}
+      </span>
+    </li>`;
+}
+
+function revSectionHtml(label, sec) {
+  if (!sec.rows.length) return "";
+  return `
+    <div class="rev-section">
+      <div class="rev-section-head">${label}
+        <span class="rev-counts">${sec.created} created · ${sec.completed} completed · ${sec.pending} pending</span>
+      </div>
+      <ul class="rev-list">${sec.rows.map(revItemRowHtml).join("")}</ul>
+    </div>`;
+}
+
+function renderReviewPage() {
+  const { start, end } = reviewRange();
+  const data = reviewData(start, end);
+
+  const tot = { created: 0, completed: 0, pending: 0, notes: 0 };
+  data.forEach((r) => {
+    tot.created += r.goals.created + r.tasks.created;
+    tot.completed += r.goals.completed + r.tasks.completed;
+    tot.pending += r.goals.pending + r.tasks.pending;
+    tot.notes += r.notes.length;
+  });
+
+  const chips = [
+    { key: "week", label: "This week" },
+    { key: "lastweek", label: "Last week" },
+    { key: "month", label: "This month" },
+    { key: "custom", label: "Custom" },
+  ];
+
+  app.innerHTML = `
+    <div class="projectpage reviewpage">
+      <div class="notepage-bar">
+        <button class="back-btn" data-back title="Back to desktop">&larr;</button>
+        <span class="rev-title">Review</span>
+        <div class="proj-tabs">
+          ${chips.map((c) => `<button class="proj-tab ${reviewMode === c.key ? "active" : ""}" data-rev-mode="${c.key}">${c.label}</button>`).join("")}
+        </div>
+        ${reviewMode === "custom" ? `
+          <div class="rev-custom">
+            <input type="date" id="rev-from" value="${reviewFrom || ""}" />
+            <span class="rev-custom-sep">→</span>
+            <input type="date" id="rev-to" value="${reviewTo || ""}" />
+            <button class="btn btn-ghost btn-sm" data-rev-apply>Apply</button>
+          </div>` : ""}
+        <div class="titlebar-actions">
+          <button class="btn btn-ghost btn-sm" data-rev-pdf>${ICONS.eye} Preview PDF</button>
+        </div>
+      </div>
+      <div class="projectpage-inner rev-inner">
+        <div class="rev-range">${rangeLabel(start, end)}</div>
+        <div class="rev-summary">
+          <div class="rev-stat"><span class="rev-num">${tot.created}</span><span class="rev-lab">Created</span></div>
+          <div class="rev-stat rev-stat-done"><span class="rev-num">${tot.completed}</span><span class="rev-lab">Completed</span></div>
+          <div class="rev-stat rev-stat-open"><span class="rev-num">${tot.pending}</span><span class="rev-lab">Pending</span></div>
+          <div class="rev-stat"><span class="rev-num">${tot.notes}</span><span class="rev-lab">Note${tot.notes === 1 ? "" : "s"}</span></div>
+        </div>
+        ${data.length ? data.map((r) => `
+          <div class="panel rev-project" style="--pa:${accentFor(r.p.id)}">
+            <div class="rev-project-head">
+              <span class="rev-dot"></span>${escapeHtml(r.p.name)}
+              ${r.archived ? `<span class="rev-archived">archived</span>` : ""}
+            </div>
+            ${revSectionHtml("Goals", r.goals)}
+            ${revSectionHtml("Tasks", r.tasks)}
+            ${r.notes.length ? `
+              <div class="rev-section">
+                <div class="rev-section-head">Notes
+                  <span class="rev-counts">${r.notes.length} created</span>
+                </div>
+                <ul class="rev-list">
+                  ${r.notes.map((n) => `
+                    <li class="rev-item">
+                      <span class="rev-status">✎</span>
+                      <span class="rev-text">${escapeHtml(noteSnippet(n))}</span>
+                      <span class="rev-times">
+                        <span title="Created">＋ ${fmtDT(n.createdAt)}</span>
+                        ${n.updatedAt && n.updatedAt !== n.createdAt ? `<span title="Last edited">✎ ${fmtDT(n.updatedAt)}</span>` : ""}
+                      </span>
+                    </li>`).join("")}
+                </ul>
+              </div>` : ""}
+          </div>`).join("")
+        : `<div class="empty-hint rev-empty">Nothing was created or completed in this period.</div>`}
+      </div>
+    </div>
+  `;
+
+  app.querySelector("[data-back]").addEventListener("click", () => (window.location.hash = "#/"));
+  app.querySelectorAll("[data-rev-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      reviewMode = btn.dataset.revMode;
+      if (reviewMode === "custom" && (!reviewFrom || !reviewTo)) {
+        // sensible default: the last 7 days
+        const to = new Date(), from = new Date();
+        from.setDate(from.getDate() - 6);
+        const iso = (d) => d.toISOString().slice(0, 10);
+        reviewFrom = iso(from); reviewTo = iso(to);
+      }
+      renderReviewPage();
+    });
+  });
+  const applyBtn = app.querySelector("[data-rev-apply]");
+  if (applyBtn) applyBtn.addEventListener("click", () => {
+    const f = app.querySelector("#rev-from").value;
+    const t = app.querySelector("#rev-to").value;
+    if (!f || !t) return;
+    reviewFrom = f; reviewTo = t;
+    renderReviewPage();
+  });
+  app.querySelector("[data-rev-pdf]").addEventListener("click", exportReviewPdf);
+}
+
+/* print-friendly report in a new window → browser's "Save as PDF" */
+function exportReviewPdf() {
+  const { start, end } = reviewRange();
+  const data = reviewData(start, end);
+  const esc = escapeHtml;
+
+  const itemRow = (t) => `
+    <tr>
+      <td class="st ${t.snapDone ? "ok" : ""}">${t.snapDone ? "✓" : "○"}</td>
+      <td class="tx">${esc(t.text)}</td>
+      <td class="tm">${fmtDT(t.createdAt)}</td>
+      <td class="tm">${t.snapDone ? fmtDT(t.closedAt) : "—"}</td>
+    </tr>`;
+
+  const sectTable = (label, sec) => !sec.rows.length ? "" : `
+    <h3>${label} <small>${sec.created} created · ${sec.completed} completed · ${sec.pending} pending</small></h3>
+    <table>
+      <thead><tr><th></th><th>Item</th><th>Created</th><th>Completed</th></tr></thead>
+      <tbody>${sec.rows.map(itemRow).join("")}</tbody>
+    </table>`;
+
+  // full note content as flowing blocks — nothing truncated, and long notes
+  // can continue across pages instead of leaving a gap
+  const notesTable = (notes) => !notes.length ? "" : `
+    <h3>Notes <small>${notes.length} created</small></h3>
+    ${notes.map((n) => `
+      <div class="note-block">
+        <div class="note-head">✎ Created ${fmtDT(n.createdAt)}${n.updatedAt && n.updatedAt !== n.createdAt ? ` · Edited ${fmtDT(n.updatedAt)}` : ""}</div>
+        <div class="note-body note-full">${noteBodyHtml(n.text)}</div>
+      </div>`).join("")}`;
+
+  const tot = { created: 0, completed: 0, pending: 0, notes: 0 };
+  data.forEach((r) => {
+    tot.created += r.goals.created + r.tasks.created;
+    tot.completed += r.goals.completed + r.tasks.completed;
+    tot.pending += r.goals.pending + r.tasks.pending;
+    tot.notes += r.notes.length;
+  });
+
+  const doc = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>DailySpace Review — ${rangeLabel(start, end)}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 13px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #1a1a1a; background: #47474b; padding: 76px 0 48px; }
+  /* the preview is real A4 pages (794×1123 @96dpi) — export captures them 1:1 */
+  #src { position: absolute; left: -9999px; top: 0; width: 698px; }
+  .page {
+    width: 794px; height: 1123px;
+    margin: 0 auto 24px; background: #fff;
+    padding: 40px 48px;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+  }
+  .page-inner { height: 100%; overflow: hidden; }
+  h1 { font-size: 21px; margin-bottom: 2px; }
+  .sub { color: #666; margin-bottom: 6px; }
+  .totals { color: #444; font-size: 12.5px; margin-bottom: 26px; padding-bottom: 14px; border-bottom: 1px solid #ddd; }
+  .project { margin-bottom: 30px; }
+  tr, h2, h3 { page-break-inside: avoid; } /* only small units avoid breaks — no huge gaps */
+  h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 12px; }
+  h2 .arch { font-size: 11px; color: #999; font-weight: normal; }
+  .proj-sep { border: none; border-top: 2.5px solid #c9c9c9; margin: 30px 0 36px; }
+  h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: #555; margin: 14px 0 6px; }
+  h3 small { text-transform: none; letter-spacing: 0; color: #999; font-weight: normal; margin-left: 6px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #999; padding: 4px 8px; border-bottom: 1px solid #e3e3e3; }
+  td { padding: 5px 8px; border-bottom: 1px solid #efefef; vertical-align: top; }
+  .st { width: 22px; color: #777; }
+  .tm { white-space: nowrap; color: #666; font-size: 12px; width: 150px; }
+  .empty { color: #888; margin-top: 30px; }
+  .note-full { line-height: 1.55; }
+  .note-full ul { margin: 4px 0 4px 18px; }
+  .note-block { margin: 0 0 16px; }
+  .note-head { font-size: 11px; color: #999; margin-bottom: 4px; }
+  .note-body { border-left: 2px solid #e3e3e3; padding-left: 12px; }
+  .toolbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; gap: 14px;
+    background: #1c1c1e; color: #eee;
+    padding: 12px 24px;
+  }
+  .toolbar button {
+    display: inline-flex; align-items: center; gap: 7px;
+    font: 500 13px/1 inherit; color: #eee;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 9px; padding: 8px 16px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .toolbar button:hover { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.5); }
+  .toolbar button svg { width: 14px; height: 14px; }
+  .toolbar .hint { font-size: 12px; color: #aaa; }
+  @media print { body { padding: 10px 4px; } .toolbar { display: none; } }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="exp" onclick="exportPdf()">${ICONS.download}<span id="exp-label">Export</span></button>
+    <span class="hint">Exact preview — Export downloads these pages as the PDF.</span>
+  </div>
+  <div id="src">
+  <h1>DailySpace — Review</h1>
+  <div class="sub">${rangeLabel(start, end)} &nbsp;·&nbsp; exported ${fmtDT(new Date().toISOString())}</div>
+  <div class="totals">${tot.created} created · ${tot.completed} completed · ${tot.pending} pending · ${tot.notes} note${tot.notes === 1 ? "" : "s"}</div>
+  ${data.length ? data.map((r) => `
+    <div class="project" style="--pa:${accentFor(r.p.id)}">
+      <h2>${esc(r.p.name)} ${r.archived ? '<span class="arch">(archived)</span>' : ""}</h2>
+      ${sectTable("Goals", r.goals)}
+      ${sectTable("Tasks", r.tasks)}
+      ${notesTable(r.notes)}
+    </div>`).join('<hr class="proj-sep" />')
+  : '<div class="empty">Nothing was created or completed in this period.</div>'}
+  </div>
+  <div id="pages"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+  <script>
+    /* lay the report out as real A4 pages: fill each page block by block,
+       tables split between rows (heading carried over) — never mid-line */
+    function paginate() {
+      const src = document.getElementById("src");
+      const pagesEl = document.getElementById("pages");
+      let inner;
+      function newPage() {
+        const p = document.createElement("div");
+        p.className = "page";
+        inner = document.createElement("div");
+        inner.className = "page-inner";
+        p.appendChild(inner);
+        pagesEl.appendChild(p);
+      }
+      const fits = function () { return inner.scrollHeight <= inner.clientHeight; };
+      function place(el) {
+        inner.appendChild(el);
+        if (!fits() && inner.children.length > 1) { el.remove(); newPage(); inner.appendChild(el); }
+      }
+
+      /* a note body becomes a list of line-level units the pages can share */
+      function lineUnits(body) {
+        const units = [];
+        let wrap = null;
+        Array.from(body.childNodes).forEach(function (n) {
+          const isBlock = n.nodeType === 1 && /^(DIV|P|UL|OL|H\d|BLOCKQUOTE|TABLE)$/.test(n.tagName);
+          if (isBlock) { wrap = null; units.push(n); }
+          else if (n.nodeType === 1 && n.tagName === "BR") { wrap = null; }
+          else {
+            if (!wrap) { wrap = document.createElement("div"); units.push(wrap); }
+            wrap.appendChild(n);
+          }
+        });
+        return units;
+      }
+
+      /* long notes flow across pages instead of jumping whole */
+      function placeNote(block) {
+        const head = block.querySelector(".note-head");
+        const units = lineUnits(block.querySelector(".note-body"));
+        let shell = document.createElement("div");
+        shell.className = "note-block";
+        shell.appendChild(head);
+        let body = document.createElement("div");
+        body.className = "note-body";
+        shell.appendChild(body);
+        inner.appendChild(shell);
+        if (!fits() && inner.children.length > 1) { shell.remove(); newPage(); inner.appendChild(shell); }
+        units.forEach(function (u) {
+          body.appendChild(u);
+          if (!fits()) {
+            u.remove();
+            newPage();
+            shell = document.createElement("div");
+            shell.className = "note-block";
+            body = document.createElement("div");
+            body.className = "note-body";
+            shell.appendChild(body);
+            inner.appendChild(shell);
+            body.appendChild(u);
+          }
+        });
+      }
+      newPage();
+
+      Array.from(src.children).forEach(function (block) {
+        if (!block.classList.contains("project")) { place(block); return; }
+
+        Array.from(block.children).forEach(function (kid) {
+          if (kid.classList && kid.classList.contains("note-block")) { placeNote(kid); return; }
+          if (kid.tagName !== "TABLE") { place(kid); return; }
+
+          const thead = kid.querySelector("thead");
+          const rows = Array.from(kid.querySelectorAll("tbody tr"));
+          let table;
+          const openTable = function () {
+            table = document.createElement("table");
+            if (thead) table.appendChild(thead.cloneNode(true));
+            table.appendChild(document.createElement("tbody"));
+            inner.appendChild(table);
+          };
+          openTable();
+          rows.forEach(function (tr) {
+            table.tBodies[0].appendChild(tr);
+            if (!fits()) {
+              tr.remove();
+              const emptyTable = !table.tBodies[0].children.length;
+              if (emptyTable) table.remove();
+              // carry a heading sitting right above so it isn't orphaned
+              const movers = [];
+              if (emptyTable) {
+                let last = inner.lastElementChild;
+                while (last && /^H[23]$/.test(last.tagName)) { movers.unshift(last); last = last.previousElementSibling; }
+              }
+              newPage();
+              movers.forEach(function (m) { inner.appendChild(m); });
+              openTable();
+              table.tBodies[0].appendChild(tr);
+            }
+          });
+        });
+      });
+      src.remove();
+    }
+    window.addEventListener("DOMContentLoaded", paginate);
+
+    /* export = one capture per preview page, 1:1 */
+    async function exportPdf() {
+      const btn = document.getElementById("exp");
+      const label = document.getElementById("exp-label");
+      if (!window.html2canvas || !window.jspdf) { window.print(); return; } // offline fallback
+      btn.disabled = true; label.textContent = "Exporting…";
+      try {
+        const pageW = 794, pageH = 1123; // A4 @96dpi
+        const pdf = new jspdf.jsPDF({ unit: "px", format: [pageW, pageH], hotfixes: ["px_scaling"] });
+        const pages = document.querySelectorAll(".page");
+        for (let i = 0; i < pages.length; i++) {
+          const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+          if (i > 0) pdf.addPage([pageW, pageH]);
+          pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pageW, pageH);
+        }
+        pdf.save(${JSON.stringify(`DailySpace Review ${rangeLabel(start, end)}.pdf`)});
+      } catch (e) {
+        window.print();
+      }
+      btn.disabled = false;
+      label.textContent = "Export";
+    }
+  <\/script>
+</body>
+</html>`;
+
+  const w = window.open("", "_blank");
+  if (!w) { alert("Allow pop-ups for this site to export the PDF."); return; }
+  w.document.write(doc);
+  w.document.close();
 }
