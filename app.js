@@ -2861,28 +2861,33 @@ const WHATSNEW_KEY = "dailyspace-whatsnew-v1"; // bump to -v2 for the next relea
 const WN_SLIDES = [
   {
     title: "Timestamps on everything",
-    desc: "Notes show when they were created and last edited. Tasks and goals carry their exact created time — and the moment you closed them.",
+    desc: "Every task and goal now carries small stamps underneath: ＋ marks when it was created, ✓ marks when you completed it. Notes show their Created and last Edited times.",
     art: `
       <div class="wn-row">
         <span class="wn-checkdot">${CHECK_SVG}</span>
         <span class="wn-task">Review legal agreement</span>
       </div>
-      <div class="wn-chips"><span class="wn-chip">＋ Jul 20, 9:41 AM</span><span class="wn-chip">✓ Jul 20, 6:15 PM</span></div>
-      <div class="wn-notecard">
-        <span class="wn-line"></span><span class="wn-line short"></span>
-        <span class="wn-chip">Created 9:41 AM · Edited 6:15 PM</span>
+      <div class="wn-legend">
+        <div class="wn-leg"><span class="wn-chip">＋ Jul 20, 9:41 AM</span><span class="wn-leglabel">= created</span></div>
+        <div class="wn-leg"><span class="wn-chip">✓ Jul 20, 6:15 PM</span><span class="wn-leglabel">= completed</span></div>
+        <div class="wn-leg"><span class="wn-chip">Created 9:41 AM · Edited 6:15 PM</span><span class="wn-leglabel">= on notes</span></div>
       </div>`,
   },
   {
     title: "Weekly Review",
-    desc: "A new calendar button in the dock. Everything created, completed and still pending — this week, last week, this month, or any custom range. Reports are snapshots: finishing something later never rewrites an earlier week.",
+    desc: "Find it behind the calendar button in the dock at the bottom of your desktop. Everything created, completed and still pending — this week, last week, this month, or any custom range. Reports are snapshots: finishing something later never rewrites an earlier week.",
     art: `
-      <div class="wn-tabs"><span class="on">This week</span><span>Last week</span><span>This month</span><span>Custom</span></div>
-      <div class="wn-stats">
-        <div class="wn-stat"><b>20</b><i>Created</i></div>
-        <div class="wn-stat"><b>9</b><i>Completed</i></div>
-        <div class="wn-stat"><b>11</b><i>Pending</i></div>
-      </div>`,
+      <div class="wn-dock">
+        <span class="wn-dockbtn">${ICONS.plus}</span>
+        <span class="wn-docksep"></span>
+        <span class="wn-dockbtn">${ICONS.shuffle}</span>
+        <span class="wn-docksep"></span>
+        <span class="wn-dockbtn hl">${ICONS.review}</span>
+        <span class="wn-docksep"></span>
+        <span class="wn-dockbtn">${ICONS.archive}</span>
+      </div>
+      <div class="wn-callout">&uarr;&nbsp; Review lives here</div>
+      <div class="wn-tabs"><span class="on">This week</span><span>Last week</span><span>This month</span><span>Custom</span></div>`,
   },
   {
     title: "PDF export, exactly as previewed",
