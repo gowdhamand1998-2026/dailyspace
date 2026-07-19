@@ -256,11 +256,40 @@ if (db) {
     cloud.ready = true;
     const hadUser = !!cloud.user;
     cloud.user = session ? session.user : null;
+    // restored session that sat idle past the limit → straight back to the gate
+    if (cloud.user && idleExpired()) { db.auth.signOut(); return; }
     if (cloud.user && !hadUser) loadCloud();
     else route(); // no session → show the password gate
     if (!cloud.user) { cloud.status = "signedout"; updateSyncChip(); }
   });
 }
+
+/* ---------- auto-lock: 30 minutes of inactivity → password gate ---------- */
+
+const IDLE_LIMIT = 30 * 60 * 1000;
+const IDLE_KEY = "dailyspace-last-active";
+
+let idleLastWrite = 0;
+function touchActivity(force) {
+  const now = Date.now();
+  if (!force && now - idleLastWrite < 10000) return; // throttle writes
+  idleLastWrite = now;
+  localStorage.setItem(IDLE_KEY, String(now));
+}
+
+function idleExpired() {
+  const last = +localStorage.getItem(IDLE_KEY) || 0;
+  return !!last && Date.now() - last > IDLE_LIMIT;
+}
+
+["pointerdown", "keydown", "touchstart", "scroll"].forEach((ev) =>
+  window.addEventListener(ev, () => touchActivity(false), { passive: true })
+);
+
+// works while the tab is open AND when coming back to a stale tab
+setInterval(() => {
+  if (db && cloud.user && idleExpired()) db.auth.signOut(); // onAuthStateChange shows the gate
+}, 30000);
 
 /* on login: cloud is the source of truth; first login pushes local data up */
 async function loadCloud() {
@@ -351,12 +380,12 @@ function renderGate(message) {
     errorEl.textContent = "";
 
     const { error } = await db.auth.signInWithPassword({ email: OWNER_EMAIL, password });
-    if (!error) return; // onAuthStateChange opens the desktop
+    if (!error) { touchActivity(true); return; } // fresh unlock resets the idle clock
 
     if (/invalid login/i.test(error.message)) {
       // first ever visit: no account yet → this password becomes THE password
       const { data, error: e2 } = await db.auth.signUp({ email: OWNER_EMAIL, password });
-      if (!e2 && data.session) return;
+      if (!e2 && data.session) { touchActivity(true); return; }
       if (!e2 && data.user) {
         errorEl.textContent = "First-time setup: confirm the email we just sent, then enter again.";
         btn.textContent = "Enter";
@@ -933,6 +962,7 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
   if (widgetKind) wireWidgetWindow(widgetKind);
   if (collectionId) wireCollection(collectionId);
   if (archiveOpen) wireArchive();
+  maybeShowWhatsNew();
 }
 
 function wireDesktop() {
@@ -2821,6 +2851,98 @@ function bindItemSection(kind, items, projectId) {
   section.querySelectorAll(".item").forEach((li) => {
     const item = items.find((i) => i.id === li.dataset.id);
     wireItem(li, item);
+  });
+}
+
+/* ---------- what's new: one-time feature tour, per device ---------- */
+
+const WHATSNEW_KEY = "dailyspace-whatsnew-v1"; // bump to -v2 for the next release
+
+const WN_SLIDES = [
+  {
+    title: "Timestamps on everything",
+    desc: "Notes show when they were created and last edited. Tasks and goals carry their exact created time — and the moment you closed them.",
+    art: `
+      <div class="wn-row">
+        <span class="wn-checkdot">${CHECK_SVG}</span>
+        <span class="wn-task">Review legal agreement</span>
+      </div>
+      <div class="wn-chips"><span class="wn-chip">＋ Jul 20, 9:41 AM</span><span class="wn-chip">✓ Jul 20, 6:15 PM</span></div>
+      <div class="wn-notecard">
+        <span class="wn-line"></span><span class="wn-line short"></span>
+        <span class="wn-chip">Created 9:41 AM · Edited 6:15 PM</span>
+      </div>`,
+  },
+  {
+    title: "Weekly Review",
+    desc: "A new calendar button in the dock. Everything created, completed and still pending — this week, last week, this month, or any custom range. Reports are snapshots: finishing something later never rewrites an earlier week.",
+    art: `
+      <div class="wn-tabs"><span class="on">This week</span><span>Last week</span><span>This month</span><span>Custom</span></div>
+      <div class="wn-stats">
+        <div class="wn-stat"><b>20</b><i>Created</i></div>
+        <div class="wn-stat"><b>9</b><i>Completed</i></div>
+        <div class="wn-stat"><b>11</b><i>Pending</i></div>
+      </div>`,
+  },
+  {
+    title: "PDF export, exactly as previewed",
+    desc: "Preview the report as real A4 pages — grouped by project, full notes included — then Export downloads precisely those pages. No surprises.",
+    art: `
+      <div class="wn-sheet">
+        <span class="wn-line dark w60"></span>
+        <span class="wn-line dark"></span><span class="wn-line dark"></span><span class="wn-line dark short"></span>
+      </div>
+      <span class="wn-export">${ICONS.download} Export</span>`,
+  },
+  {
+    title: "Auto-lock",
+    desc: "Step away for 30 minutes and this device locks itself — your password opens it again.",
+    art: `
+      <span class="wn-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+      <span class="wn-locklabel">30 min idle &rarr; locked</span>`,
+  },
+];
+
+let wnStep = 0;
+
+function maybeShowWhatsNew() {
+  if (localStorage.getItem(WHATSNEW_KEY)) return; // this device has seen it
+  if (app.querySelector(".wn-backdrop")) return;
+  wnStep = 0;
+  app.appendChild(elFromHtml(`<div class="window-backdrop wn-backdrop"><div class="wn-card"></div></div>`));
+  renderWnStep();
+}
+
+function renderWnStep() {
+  const card = app.querySelector(".wn-card");
+  if (!card) return;
+  const s = WN_SLIDES[wnStep];
+  const last = wnStep === WN_SLIDES.length - 1;
+  card.innerHTML = `
+    <button class="wn-close" data-wn-close title="Dismiss">&times;</button>
+    <div class="wn-badge">What's new</div>
+    <div class="wn-art">${s.art}</div>
+    <h3 class="wn-title">${s.title}</h3>
+    <p class="wn-desc">${s.desc}</p>
+    <div class="wn-foot">
+      <div class="wn-dots">${WN_SLIDES.map((_, i) => `<span class="wn-dot ${i === wnStep ? "on" : ""}"></span>`).join("")}</div>
+      <div class="wn-btns">
+        ${wnStep ? `<button class="btn btn-ghost btn-sm" data-wn-back>Back</button>` : ""}
+        <button class="btn btn-primary btn-sm" data-wn-next>${last ? "Done" : "Next"}</button>
+      </div>
+    </div>`;
+
+  const close = () => {
+    localStorage.setItem(WHATSNEW_KEY, "1");
+    const bd = app.querySelector(".wn-backdrop");
+    if (bd) bd.remove();
+  };
+  card.querySelector("[data-wn-close]").addEventListener("click", close);
+  const back = card.querySelector("[data-wn-back]");
+  if (back) back.addEventListener("click", () => { wnStep--; renderWnStep(); });
+  card.querySelector("[data-wn-next]").addEventListener("click", () => {
+    if (wnStep >= WN_SLIDES.length - 1) close();
+    else { wnStep++; renderWnStep(); }
   });
 }
 
