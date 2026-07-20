@@ -922,64 +922,136 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 
 .kanban {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
   align-items: start;
 }
 
+/* columns: airy glass wells with a tinted crown */
 .kcol {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--line);
-  border-radius: 15px;
-  padding: 14px;
-  min-height: 220px;
-  transition: border-color 0.15s, background 0.15s;
+  position: relative;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 16px;
+  padding: 14px 12px 12px;
+  min-height: 280px;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  overflow: hidden;
 }
+.kcol::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--kt), transparent);
+  opacity: 0.8;
+}
+.kcol::after {
+  content: "";
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160px; height: 80px;
+  border-radius: 50%;
+  background: var(--kt);
+  opacity: 0.08;
+  filter: blur(30px);
+  pointer-events: none;
+}
+
 .kcol-over {
-  border-color: rgba(59, 130, 246, 0.6);
-  background: rgba(59, 130, 246, 0.07);
+  border-color: color-mix(in srgb, var(--kt) 65%, transparent);
+  background: color-mix(in srgb, var(--kt) 7%, transparent);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--kt) 20%, transparent);
 }
 
 .kcol-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11.5px;
+  gap: 7px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.11em;
   color: var(--text-2);
   margin-bottom: 12px;
+  position: relative;
 }
 .kcol-head .section-count { margin-left: auto; }
 
-.kdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.kdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--kt);
+  box-shadow: 0 0 8px var(--kt);
+}
 
 .kcol-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-height: 40px;
+  position: relative;
 }
 
 .kcard {
-  background: rgba(255, 255, 255, 0.055);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 11px 13px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 13px;
+  padding: 10px 12px;
   cursor: grab;
   touch-action: none;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
-.kcard:hover { border-color: var(--line-strong); background: rgba(255, 255, 255, 0.08); }
+.kcard:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+}
 .kcard:active { cursor: grabbing; }
-.kcard.editing { cursor: default; }
+.kcard.editing { cursor: default; transform: none; }
 
-.kcard-name { font-size: 14px; font-weight: 550; }
+/* landing pop when a card arrives in a column */
+.kcard-pop { animation: kpop 0.3s var(--ease); }
+@keyframes kpop {
+  0% { transform: scale(0.92); opacity: 0.5; }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.kcard-top { display: flex; align-items: center; gap: 9px; }
+
+.kmono {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.95);
+  background: linear-gradient(135deg, var(--kc, #888) 0%, color-mix(in srgb, var(--kc, #888) 55%, #000) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.kcard-name {
+  font-size: 13.5px;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .kcard-note {
   font-size: 12px;
   color: var(--text-3);
-  margin-top: 3px;
+  margin-top: 5px;
+  padding-left: 35px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -987,6 +1059,7 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .kcard-link {
   display: inline-block;
   margin-top: 6px;
+  margin-left: 35px;
   font-size: 11.5px;
   font-weight: 500;
   color: #60a5fa;
@@ -1015,6 +1088,9 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   margin-top: 20px;
 }
 
+@media (max-width: 1000px) {
+  .kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 700px) {
   .kanban { grid-template-columns: 1fr; }
   .kcol { min-height: 0; }

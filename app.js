@@ -2346,9 +2346,9 @@ function projTabBodyHtml(p) {
       </div>
       <div class="kanban">
         ${TRACKER_STAGES.map((s) => `
-          <div class="kcol" data-stage-col="${s.key}">
+          <div class="kcol" data-stage-col="${s.key}" style="--kt:${s.tint}">
             <div class="kcol-head">
-              <span class="kdot" style="background:${s.tint}"></span>${s.label}
+              <span class="kdot"></span>${s.label}
               <span class="section-count" data-kcount="${s.key}">${p.tracker.items.filter((i) => i.stage === s.key).length}</span>
             </div>
             <div class="kcol-list">
@@ -2394,22 +2394,34 @@ const PROJ_TABS = [
 ];
 
 const TRACKER_STAGES = [
+  { key: "watch", label: "Watchlist", tint: "#60a5fa" },
   { key: "active", label: "Active", tint: "#4ade80" },
   { key: "progress", label: "In Progress", tint: "#fbbf24" },
   { key: "closed", label: "Closed", tint: "#94a3b8" },
 ];
 
+/* tracker leads the tab bar when it exists */
 function projTabsFor(p) {
   return p.tracker
-    ? [...PROJ_TABS, { key: "tracker", label: p.tracker.name }]
+    ? [{ key: "tracker", label: p.tracker.name }, ...PROJ_TABS]
     : PROJ_TABS;
+}
+
+/* stable color per company name */
+function kcolor(name) {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return PEOPLE_COLORS[h % PEOPLE_COLORS.length];
 }
 
 function kcardInner(i) {
   let host = "";
   if (i.link) { try { host = new URL(i.link).hostname.replace(/^www\./, ""); } catch {} }
   return `
-    <div class="kcard-name">${escapeHtml(i.name)}</div>
+    <div class="kcard-top">
+      <span class="kmono" style="--kc:${kcolor(i.name)}">${escapeHtml(i.name.charAt(0).toUpperCase())}</span>
+      <span class="kcard-name">${escapeHtml(i.name)}</span>
+    </div>
     ${i.note ? `<div class="kcard-note">${escapeHtml(i.note)}</div>` : ""}
     ${i.link ? `<a class="kcard-link" href="${escapeHtml(i.link)}" target="_blank" rel="noopener">${escapeHtml(host || "link")} ↗</a>` : ""}`;
 }
@@ -2422,7 +2434,7 @@ function renderProjectPage(id, tab) {
   const p = getProject(id);
   const accent = accentFor(id);
 
-  if (projTabFor !== id) { projTab = "notes"; projTabFor = id; } // fresh open → Notes
+  if (projTabFor !== id) { projTab = p.tracker ? "tracker" : "notes"; projTabFor = id; } // tracker leads when present
   if (tab) projTab = tab;
 
   const body = projTabBodyHtml(p);
@@ -2758,7 +2770,11 @@ function wireTrackerTab(p, id, page) {
           if (stage !== item.stage) {
             item.stage = stage;
             persist();
-            hover.querySelector(".kcol-list").appendChild(card); // moves in place
+            const list = hover.querySelector(".kcol-list");
+            list.prepend(card); // lands on top of its new column
+            card.classList.remove("kcard-pop");
+            void card.offsetWidth;
+            card.classList.add("kcard-pop");
             updateCounts();
           }
         }
@@ -2771,16 +2787,18 @@ function wireTrackerTab(p, id, page) {
 
   page.querySelectorAll(".kcard").forEach(wireCard);
 
-  // quick add → lands in Active, no re-render
+  // quick add → lands on TOP of the Watchlist, no re-render
   const input = page.querySelector("[data-tk-input]");
   function add() {
     const name = input.value.trim();
     if (!name) return;
-    const item = { id: uid(), name, stage: "active" };
-    tracker.items.push(item);
+    const item = { id: uid(), name, stage: "watch" };
+    tracker.items.unshift(item);
     persist();
     const card = elFromHtml(kcardHtml(item));
-    page.querySelector(`[data-stage-col="active"] .kcol-list`).appendChild(card);
+    const list = page.querySelector(`[data-stage-col="watch"] .kcol-list`);
+    list.prepend(card);
+    card.classList.add("kcard-pop");
     wireCard(card);
     updateCounts();
     input.value = "";
