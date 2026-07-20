@@ -2338,6 +2338,28 @@ function projTabBodyHtml(p) {
       ${sectionHtml("goals", "Goals", p.goals, "Add a goal...")}
       ${sectionHtml("tasks", "Tasks", p.tasks, "Add a task...")}`;
   }
+  if (projTab === "tracker" && p.tracker) {
+    return `
+      <div class="tracker-addrow">
+        <input type="text" data-tk-input placeholder="Add to ${escapeHtml(p.tracker.name)}…" maxlength="80" />
+        <button class="btn btn-ghost" data-tk-add>Add</button>
+      </div>
+      <div class="kanban">
+        ${TRACKER_STAGES.map((s) => `
+          <div class="kcol" data-stage-col="${s.key}">
+            <div class="kcol-head">
+              <span class="kdot" style="background:${s.tint}"></span>${s.label}
+              <span class="section-count" data-kcount="${s.key}">${p.tracker.items.filter((i) => i.stage === s.key).length}</span>
+            </div>
+            <div class="kcol-list">
+              ${p.tracker.items.filter((i) => i.stage === s.key).map(kcardHtml).join("")}
+            </div>
+          </div>`).join("")}
+      </div>
+      <div class="tracker-foot">
+        <button class="btn btn-danger btn-sm" data-tk-delete>Delete tracker</button>
+      </div>`;
+  }
   const linked = [...p.tasks, ...p.goals].filter((t) => t.link);
   const hostOf = (url) => {
     try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
@@ -2371,6 +2393,31 @@ const PROJ_TABS = [
   { key: "links", label: "Docs / Links" },
 ];
 
+const TRACKER_STAGES = [
+  { key: "active", label: "Active", tint: "#4ade80" },
+  { key: "progress", label: "In Progress", tint: "#fbbf24" },
+  { key: "closed", label: "Closed", tint: "#94a3b8" },
+];
+
+function projTabsFor(p) {
+  return p.tracker
+    ? [...PROJ_TABS, { key: "tracker", label: p.tracker.name }]
+    : PROJ_TABS;
+}
+
+function kcardInner(i) {
+  let host = "";
+  if (i.link) { try { host = new URL(i.link).hostname.replace(/^www\./, ""); } catch {} }
+  return `
+    <div class="kcard-name">${escapeHtml(i.name)}</div>
+    ${i.note ? `<div class="kcard-note">${escapeHtml(i.note)}</div>` : ""}
+    ${i.link ? `<a class="kcard-link" href="${escapeHtml(i.link)}" target="_blank" rel="noopener">${escapeHtml(host || "link")} ↗</a>` : ""}`;
+}
+
+function kcardHtml(i) {
+  return `<div class="kcard" data-kcard="${i.id}">${kcardInner(i)}</div>`;
+}
+
 function renderProjectPage(id, tab) {
   const p = getProject(id);
   const accent = accentFor(id);
@@ -2386,9 +2433,10 @@ function renderProjectPage(id, tab) {
         <button class="back-btn" data-back title="Back to desktop">&larr;</button>
         <input class="proj-name-bar" id="pj-name" value="${escapeHtml(p.name)}" maxlength="60" />
         <div class="proj-tabs">
-          ${PROJ_TABS.map((t) => `
-            <button class="proj-tab ${projTab === t.key ? "active" : ""}" data-ptab="${t.key}">${t.label}</button>
+          ${projTabsFor(p).map((t) => `
+            <button class="proj-tab ${projTab === t.key ? "active" : ""}" data-ptab="${t.key}">${escapeHtml(t.label)}</button>
           `).join("")}
+          ${p.tracker ? "" : `<button class="proj-tab proj-tab-add" data-add-tab title="Add a tracker tab">+</button>`}
         </div>
         <div class="titlebar-actions">
           <button class="tb-action" data-tb-archive title="Archive project">${ICONS.archive}</button>
@@ -2457,6 +2505,10 @@ function wireProjectPage(id) {
     });
   }
   bindField("#pj-name", (v) => { p.name = v || p.name; });
+
+  // "+" → enable a tracker tab for this project
+  const addTab = page.querySelector("[data-add-tab]");
+  if (addTab) addTab.addEventListener("click", () => showAddTrackerModal(p, id));
 
   wireTabContent(id, page);
 
@@ -2541,6 +2593,8 @@ function wireTabContent(id, page) {
   } else if (projTab === "work") {
     bindItemSection("goals", p.goals, id);
     bindItemSection("tasks", p.tasks, id);
+  } else if (projTab === "tracker" && p.tracker) {
+    wireTrackerTab(p, id, page);
   } else if (projTab === "links") {
     page.querySelector("[data-add-plink]").addEventListener("click", () => showAddProjectLinkModal(p, id, page));
     page.querySelectorAll("[data-del-plink]").forEach((btn) => {
@@ -2554,6 +2608,194 @@ function wireTabContent(id, page) {
       });
     });
   }
+}
+
+/* ---------- tracker tab (pipeline board) ---------- */
+
+function showAddTrackerModal(p, id) {
+  const backdrop = document.createElement("div");
+  backdrop.className = "window-backdrop";
+  backdrop.innerHTML = `
+    <div class="new-form">
+      <h3>Add a tracker tab</h3>
+      <p class="form-note">A board with Active / In Progress / Closed columns — track companies, deals, candidates, anything.</p>
+      <input type="text" id="tk-name" placeholder="Tab name (e.g. Companies)" maxlength="30" />
+      <div class="row">
+        <button class="btn btn-ghost" id="tk-cancel">Cancel</button>
+        <button class="btn btn-primary" id="tk-create">Create</button>
+      </div>
+    </div>
+  `;
+  app.appendChild(backdrop);
+
+  const nameInput = backdrop.querySelector("#tk-name");
+  nameInput.focus();
+
+  function close() { backdrop.remove(); }
+
+  function create() {
+    p.tracker = { name: nameInput.value.trim() || "Tracker", items: [] };
+    persist();
+    close();
+    renderProjectPage(id, "tracker");
+  }
+
+  backdrop.querySelector("#tk-create").addEventListener("click", create);
+  backdrop.querySelector("#tk-cancel").addEventListener("click", close);
+  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") create();
+    if (e.key === "Escape") close();
+  });
+}
+
+function wireTrackerTab(p, id, page) {
+  const tracker = p.tracker;
+
+  function updateCounts() {
+    TRACKER_STAGES.forEach((s) => {
+      const el = page.querySelector(`[data-kcount="${s.key}"]`);
+      if (el) el.textContent = tracker.items.filter((i) => i.stage === s.key).length;
+    });
+  }
+
+  /* click (no drag) → inline editor inside the card */
+  function openCardEditor(card, item) {
+    if (card.classList.contains("editing")) return;
+    card.classList.add("editing");
+    card.innerHTML = `
+      <div class="item-editor">
+        <input class="edit-input" data-ke-name value="${escapeHtml(item.name)}" maxlength="80" />
+        <input class="edit-input edit-link" data-ke-link value="${escapeHtml(item.link || "")}" placeholder="Link (optional)" maxlength="500" />
+        <input class="edit-input edit-link" data-ke-note value="${escapeHtml(item.note || "")}" placeholder="Note (optional)" maxlength="140" />
+        <div class="editor-actions">
+          <button class="btn btn-ghost btn-sm" data-ke-delete>Delete</button>
+          <span class="editor-spacer"></span>
+          <button class="btn btn-ghost btn-sm" data-ke-cancel>Cancel</button>
+          <button class="btn btn-primary btn-sm" data-ke-save>Save</button>
+        </div>
+      </div>`;
+    const nameIn = card.querySelector("[data-ke-name]");
+    nameIn.focus();
+    nameIn.select();
+
+    function closeEditor() {
+      card.classList.remove("editing");
+      card.innerHTML = kcardInner(item);
+    }
+
+    card.querySelector("[data-ke-save]").addEventListener("click", () => {
+      const name = nameIn.value.trim();
+      if (name) item.name = name;
+      const url = card.querySelector("[data-ke-link]").value.trim();
+      item.link = url ? (/^https?:\/\//i.test(url) ? url : "https://" + url) : undefined;
+      if (!item.link) delete item.link;
+      const note = card.querySelector("[data-ke-note]").value.trim();
+      if (note) item.note = note; else delete item.note;
+      persist();
+      closeEditor();
+    });
+    card.querySelector("[data-ke-cancel]").addEventListener("click", closeEditor);
+    card.querySelector("[data-ke-delete]").addEventListener("click", () => {
+      if (!confirm(`Delete "${item.name}"?`)) return;
+      tracker.items = tracker.items.filter((x) => x.id !== item.id);
+      persist();
+      card.remove();
+      updateCounts();
+    });
+    card.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") closeEditor();
+      if (e.key === "Enter") card.querySelector("[data-ke-save]").click();
+    });
+  }
+
+  /* drag a card between columns — ghost follows the pointer */
+  function wireCard(card) {
+    const item = tracker.items.find((x) => x.id === card.dataset.kcard);
+
+    card.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("input, button, a") || card.classList.contains("editing")) return;
+      e.preventDefault();
+      card.setPointerCapture(e.pointerId);
+
+      const sx = e.clientX, sy = e.clientY;
+      let dragged = false;
+      let ghost = null;
+      let hover = null;
+
+      function move(ev) {
+        if (!dragged && Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6) {
+          dragged = true;
+          ghost = card.cloneNode(true);
+          ghost.classList.add("kghost");
+          document.body.appendChild(ghost);
+          card.classList.add("kcard-src");
+        }
+        if (dragged) {
+          ghost.style.left = ev.clientX + "px";
+          ghost.style.top = ev.clientY + "px";
+          const under = document.elementsFromPoint(ev.clientX, ev.clientY)
+            .find((n) => n !== ghost && !ghost.contains(n));
+          const col = under && under.closest("[data-stage-col]");
+          if (hover && hover !== col) hover.classList.remove("kcol-over");
+          hover = col;
+          if (hover) hover.classList.add("kcol-over");
+        }
+      }
+
+      function up() {
+        card.removeEventListener("pointermove", move);
+        card.removeEventListener("pointerup", up);
+        if (ghost) ghost.remove();
+        card.classList.remove("kcard-src");
+        if (hover) hover.classList.remove("kcol-over");
+
+        if (!dragged) { openCardEditor(card, item); return; }
+        if (hover) {
+          const stage = hover.dataset.stageCol;
+          if (stage !== item.stage) {
+            item.stage = stage;
+            persist();
+            hover.querySelector(".kcol-list").appendChild(card); // moves in place
+            updateCounts();
+          }
+        }
+      }
+
+      card.addEventListener("pointermove", move);
+      card.addEventListener("pointerup", up);
+    });
+  }
+
+  page.querySelectorAll(".kcard").forEach(wireCard);
+
+  // quick add → lands in Active, no re-render
+  const input = page.querySelector("[data-tk-input]");
+  function add() {
+    const name = input.value.trim();
+    if (!name) return;
+    const item = { id: uid(), name, stage: "active" };
+    tracker.items.push(item);
+    persist();
+    const card = elFromHtml(kcardHtml(item));
+    page.querySelector(`[data-stage-col="active"] .kcol-list`).appendChild(card);
+    wireCard(card);
+    updateCounts();
+    input.value = "";
+    input.focus();
+  }
+  page.querySelector("[data-tk-add]").addEventListener("click", add);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+
+  // remove the whole tracker tab
+  page.querySelector("[data-tk-delete]").addEventListener("click", () => {
+    if (!confirm(`Delete the "${tracker.name}" tracker and everything on it?`)) return;
+    delete p.tracker;
+    persist();
+    renderProjectPage(id, "notes");
+  });
 }
 
 /* small modal: add a link directly to the project */
