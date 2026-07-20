@@ -2485,6 +2485,8 @@ function wireProjectPage(id) {
   document.addEventListener("keydown", function esc(e) {
     if (!app.querySelector(".projectpage")) { document.removeEventListener("keydown", esc); return; }
     if (e.key === "Escape" && !e.target.closest("input, textarea, .item-editor")) {
+      const cp = app.querySelector(".company-panel");
+      if (cp) { cp.remove(); return; } // close the company space first
       document.removeEventListener("keydown", esc);
       window.location.hash = "#/";
     }
@@ -2672,54 +2674,106 @@ function wireTrackerTab(p, id, page) {
     });
   }
 
-  /* click (no drag) → inline editor inside the card */
-  function openCardEditor(card, item) {
-    if (card.classList.contains("editing")) return;
-    card.classList.add("editing");
-    card.innerHTML = `
-      <div class="item-editor">
-        <input class="edit-input" data-ke-name value="${escapeHtml(item.name)}" maxlength="80" />
-        <input class="edit-input edit-link" data-ke-link value="${escapeHtml(item.link || "")}" placeholder="Link (optional)" maxlength="500" />
-        <input class="edit-input edit-link" data-ke-note value="${escapeHtml(item.note || "")}" placeholder="Note (optional)" maxlength="140" />
-        <div class="editor-actions">
-          <button class="btn btn-ghost btn-sm" data-ke-delete>Delete</button>
-          <span class="editor-spacer"></span>
-          <button class="btn btn-ghost btn-sm" data-ke-cancel>Cancel</button>
-          <button class="btn btn-primary btn-sm" data-ke-save>Save</button>
+  /* move a card into a stage column (used by drag AND the panel) */
+  function moveCardToStage(card, item, stageKey) {
+    item.stage = stageKey;
+    persist();
+    const list = page.querySelector(`[data-stage-col="${stageKey}"] .kcol-list`);
+    list.prepend(card);
+    card.classList.remove("kcard-pop");
+    void card.offsetWidth;
+    card.classList.add("kcard-pop");
+    updateCounts();
+  }
+
+  /* click (no drag) → the company's own space slides in */
+  function openCompanyPanel(card, item) {
+    const old = page.querySelector(".company-panel");
+    if (old) old.remove();
+
+    const panel = elFromHtml(`
+      <div class="person-panel company-panel">
+        <button class="panel-close" data-cp-close title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <div class="person-head">
+          <span class="kmono kmono-lg" style="--kc:${kcolor(item.name)}">${escapeHtml(item.name.charAt(0).toUpperCase())}</span>
+          <input class="person-name" data-cp-name value="${escapeHtml(item.name)}" maxlength="80" />
         </div>
-      </div>`;
-    const nameIn = card.querySelector("[data-ke-name]");
-    nameIn.focus();
-    nameIn.select();
+        <div class="cp-stages">
+          ${TRACKER_STAGES.map((s) => `
+            <button class="cp-stage ${item.stage === s.key ? "active" : ""}" data-cp-stage="${s.key}" style="--kt:${s.tint}">${s.label}</button>
+          `).join("")}
+        </div>
+        <input class="edit-input" data-cp-link value="${escapeHtml(item.link || "")}" placeholder="Link (site, deck…)" maxlength="500" />
+        <input class="edit-input" data-cp-sum value="${escapeHtml(item.note || "")}" placeholder="One-line summary (shows on the card)" maxlength="140" />
+        <div class="section-title" style="margin-top:16px;">Notes</div>
+        <textarea class="cp-notes" data-cp-notes placeholder="Everything about ${escapeHtml(item.name)}…">${escapeHtml(item.notes || "")}</textarea>
+        <div class="person-foot">
+          <button class="btn btn-danger btn-sm" data-cp-delete>Delete</button>
+        </div>
+      </div>`);
+    page.appendChild(panel);
 
-    function closeEditor() {
-      card.classList.remove("editing");
-      card.innerHTML = kcardInner(item);
-    }
+    const refreshCard = () => { card.innerHTML = kcardInner(item); };
+    const closePanel = () => panel.remove();
 
-    card.querySelector("[data-ke-save]").addEventListener("click", () => {
-      const name = nameIn.value.trim();
-      if (name) item.name = name;
-      const url = card.querySelector("[data-ke-link]").value.trim();
-      item.link = url ? (/^https?:\/\//i.test(url) ? url : "https://" + url) : undefined;
-      if (!item.link) delete item.link;
-      const note = card.querySelector("[data-ke-note]").value.trim();
-      if (note) item.note = note; else delete item.note;
+    panel.querySelector("[data-cp-close]").addEventListener("click", closePanel);
+
+    const nameIn = panel.querySelector("[data-cp-name]");
+    nameIn.addEventListener("blur", () => {
+      const v = nameIn.value.trim();
+      if (v) item.name = v;
       persist();
-      closeEditor();
+      refreshCard();
+      panel.querySelector(".kmono-lg").textContent = item.name.charAt(0).toUpperCase();
+      panel.querySelector(".kmono-lg").style.setProperty("--kc", kcolor(item.name));
     });
-    card.querySelector("[data-ke-cancel]").addEventListener("click", closeEditor);
-    card.querySelector("[data-ke-delete]").addEventListener("click", () => {
+    nameIn.addEventListener("keydown", (e) => { if (e.key === "Enter") nameIn.blur(); });
+
+    // stage pills — the card physically moves on the board as you click
+    panel.querySelectorAll("[data-cp-stage]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.cpStage === item.stage) return;
+        moveCardToStage(card, item, btn.dataset.cpStage);
+        panel.querySelectorAll("[data-cp-stage]").forEach((b) =>
+          b.classList.toggle("active", b.dataset.cpStage === item.stage)
+        );
+      });
+    });
+
+    const linkIn = panel.querySelector("[data-cp-link]");
+    linkIn.addEventListener("blur", () => {
+      const url = linkIn.value.trim();
+      if (url) item.link = /^https?:\/\//i.test(url) ? url : "https://" + url;
+      else delete item.link;
+      persist();
+      refreshCard();
+    });
+
+    const sumIn = panel.querySelector("[data-cp-sum]");
+    sumIn.addEventListener("blur", () => {
+      const v = sumIn.value.trim();
+      if (v) item.note = v; else delete item.note;
+      persist();
+      refreshCard();
+    });
+
+    const notesIn = panel.querySelector("[data-cp-notes]");
+    let nTimer = null;
+    notesIn.addEventListener("input", () => {
+      clearTimeout(nTimer);
+      nTimer = setTimeout(() => { item.notes = notesIn.value; persist(); }, 500);
+    });
+    notesIn.addEventListener("blur", () => { item.notes = notesIn.value; persist(); });
+
+    panel.querySelector("[data-cp-delete]").addEventListener("click", () => {
       if (!confirm(`Delete "${item.name}"?`)) return;
       tracker.items = tracker.items.filter((x) => x.id !== item.id);
       persist();
       card.remove();
       updateCounts();
-    });
-    card.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Escape") closeEditor();
-      if (e.key === "Enter") card.querySelector("[data-ke-save]").click();
+      closePanel();
     });
   }
 
@@ -2764,18 +2818,16 @@ function wireTrackerTab(p, id, page) {
         card.classList.remove("kcard-src");
         if (hover) hover.classList.remove("kcol-over");
 
-        if (!dragged) { openCardEditor(card, item); return; }
+        if (!dragged) { openCompanyPanel(card, item); return; }
         if (hover) {
           const stage = hover.dataset.stageCol;
           if (stage !== item.stage) {
-            item.stage = stage;
-            persist();
-            const list = hover.querySelector(".kcol-list");
-            list.prepend(card); // lands on top of its new column
-            card.classList.remove("kcard-pop");
-            void card.offsetWidth;
-            card.classList.add("kcard-pop");
-            updateCounts();
+            moveCardToStage(card, item, stage);
+            // keep an open panel's stage pills in sync
+            const openPanel = page.querySelector(".company-panel");
+            if (openPanel) openPanel.querySelectorAll("[data-cp-stage]").forEach((b) =>
+              b.classList.toggle("active", b.dataset.cpStage === item.stage)
+            );
           }
         }
       }
