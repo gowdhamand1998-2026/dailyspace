@@ -116,6 +116,23 @@ function ensureDefaults(s) {
     if (!p.docs) p.docs = [];   // (legacy) standalone project docs
     if (!p.links) p.links = []; // project-level links
 
+    // companies in a tracker are full sub-projects: give them the same organs
+    if (p.tracker) {
+      p.tracker.items.forEach((c) => {
+        if (c.stage === "active") c.stage = "progress"; // merged stages
+        if (!c.notesList) c.notesList = [];
+        if (!c.goals) c.goals = [];
+        if (!c.tasks) c.tasks = [];
+        if (!c.links) c.links = [];
+        if (!c.docs) c.docs = [];
+        // old side-panel notes become the first note card
+        if (c.notes && c.notes.trim()) {
+          c.notesList.unshift({ id: uid(), text: c.notes, createdAt: new Date().toISOString() });
+          delete c.notes;
+        }
+      });
+    }
+
     // timestamps: every task/goal gets a createdAt; every done one gets a closedAt
     [...p.goals, ...p.tasks].forEach((t) => {
       if (!t.createdAt) t.createdAt = new Date().toISOString();
@@ -680,7 +697,7 @@ function route() {
   // full-page note for a task/goal
   const nMatch = window.location.hash.match(/^#\/n\/([^/]+)\/(goals|tasks|docs)\/(.+)$/);
   if (nMatch) {
-    const np = getProject(nMatch[1]);
+    const np = containerByRef(nMatch[1]);
     const nItem = np && np[nMatch[2]].find((i) => i.id === nMatch[3]);
     if (nItem) { renderNotePage(nMatch[1], nMatch[2], nMatch[3]); return; }
   }
@@ -696,7 +713,7 @@ function route() {
   }
 
   const match = window.location.hash.match(/^#\/p\/(.+)$/);
-  if (match && getProject(match[1])) { renderProjectPage(match[1]); return; }
+  if (match && containerByRef(match[1])) { renderProjectPage(match[1]); return; }
 
   renderDesktop(null);
 }
@@ -1444,9 +1461,9 @@ function rowThumb(it) {
 /* ---------- full-page note for a task/goal ---------- */
 
 function renderNotePage(pid, kind, itemId) {
-  const p = getProject(pid);
+  const p = containerByRef(pid); // project OR a company sub-project
   const item = p[kind].find((i) => i.id === itemId);
-  const accent = accentFor(pid);
+  const accent = pid.includes("~") ? kcolor(p.name) : accentFor(pid);
 
   app.innerHTML = `
     <div class="notepage" style="--pa:${accent}">
@@ -2340,25 +2357,22 @@ function projTabBodyHtml(p) {
   }
   if (projTab === "tracker" && p.tracker) {
     return `
-      <div class="tracker-addrow">
-        <input type="text" data-tk-input placeholder="Add to ${escapeHtml(p.tracker.name)}…" maxlength="80" />
-        <button class="btn btn-ghost" data-tk-add>Add</button>
-      </div>
-      <div class="kanban">
+      <div class="hub">
         ${TRACKER_STAGES.map((s) => `
-          <div class="kcol" data-stage-col="${s.key}" style="--kt:${s.tint}">
+          <section class="hub-stage" data-stage-col="${s.key}" style="--kt:${s.tint}">
             <div class="kcol-head">
               <span class="kdot"></span>${s.label}
               <span class="section-count" data-kcount="${s.key}">${p.tracker.items.filter((i) => i.stage === s.key).length}</span>
             </div>
-            <div class="kcol-list">
+            <div class="hub-grid kcol-list">
               ${p.tracker.items.filter((i) => i.stage === s.key).map(kcardHtml).join("")}
             </div>
-          </div>`).join("")}
+          </section>`).join("")}
       </div>
       <div class="tracker-foot">
-        <button class="btn btn-danger btn-sm" data-tk-delete>Delete tracker</button>
-      </div>`;
+        <button class="btn btn-danger btn-sm" data-tk-delete>Delete this hub</button>
+      </div>
+      <button class="fab" data-tk-fab title="Add">+</button>`;
   }
   const linked = [...p.tasks, ...p.goals].filter((t) => t.link);
   const hostOf = (url) => {
@@ -2395,10 +2409,18 @@ const PROJ_TABS = [
 
 const TRACKER_STAGES = [
   { key: "watch", label: "Watchlist", tint: "#60a5fa" },
-  { key: "active", label: "Active", tint: "#4ade80" },
   { key: "progress", label: "In Progress", tint: "#fbbf24" },
   { key: "closed", label: "Closed", tint: "#94a3b8" },
 ];
+
+/* resolve "pid" → project, or "pid~cid" → a company sub-project inside it */
+function containerByRef(ref) {
+  const [pid, cid] = ref.split("~");
+  const p = getProject(pid);
+  if (!p) return null;
+  if (!cid) return p;
+  return (p.tracker && p.tracker.items.find((i) => i.id === cid)) || null;
+}
 
 /* tracker leads the tab bar when it exists */
 function projTabsFor(p) {
@@ -2415,44 +2437,54 @@ function kcolor(name) {
 }
 
 function kcardInner(i) {
-  let host = "";
-  if (i.link) { try { host = new URL(i.link).hostname.replace(/^www\./, ""); } catch {} }
+  const openTasks = (i.tasks || []).filter((t) => !t.done).length;
+  const noteCount = (i.notesList || []).length;
+  const meta = [];
+  if (openTasks) meta.push(`${openTasks} open task${openTasks > 1 ? "s" : ""}`);
+  if (noteCount) meta.push(`${noteCount} note${noteCount > 1 ? "s" : ""}`);
   return `
-    <div class="kcard-top">
-      <span class="kmono" style="--kc:${kcolor(i.name)}">${escapeHtml(i.name.charAt(0).toUpperCase())}</span>
-      <span class="kcard-name">${escapeHtml(i.name)}</span>
+    <div class="ktile-top">
+      <span class="kmono kmono-lg" style="--kc:${kcolor(i.name)}">${escapeHtml(i.name.charAt(0).toUpperCase())}</span>
     </div>
-    ${i.note ? `<div class="kcard-note">${escapeHtml(i.note)}</div>` : ""}
-    ${i.link ? `<a class="kcard-link" href="${escapeHtml(i.link)}" target="_blank" rel="noopener">${escapeHtml(host || "link")} ↗</a>` : ""}`;
+    <div class="kcard-name">${escapeHtml(i.name)}</div>
+    ${i.note ? `<div class="ktile-sum">${escapeHtml(i.note)}</div>` : ""}
+    <div class="ktile-meta">${meta.join(" · ") || "Empty — click to open"}</div>`;
 }
 
 function kcardHtml(i) {
-  return `<div class="kcard" data-kcard="${i.id}">${kcardInner(i)}</div>`;
+  return `<div class="kcard ktile" data-kcard="${i.id}">${kcardInner(i)}</div>`;
 }
 
 function renderProjectPage(id, tab) {
-  const p = getProject(id);
-  const accent = accentFor(id);
+  const p = containerByRef(id);
+  const isCompany = id.includes("~");
+  const parentId = isCompany ? id.split("~")[0] : null;
+  const accent = isCompany ? kcolor(p.name) : accentFor(id);
 
-  if (projTabFor !== id) { projTab = p.tracker ? "tracker" : "notes"; projTabFor = id; } // tracker leads when present
+  if (projTabFor !== id) {
+    projTab = (!isCompany && p.tracker) ? "tracker" : "notes";
+    projTabFor = id;
+  }
   if (tab) projTab = tab;
 
+  const tabs = isCompany ? PROJ_TABS : projTabsFor(p);
   const body = projTabBodyHtml(p);
 
   const pageHtml = `
-    <div class="projectpage" style="--pa:${accent}">
+    <div class="projectpage ${isCompany ? "companypage" : ""}" style="--pa:${accent}">
       <div class="notepage-bar">
-        <button class="back-btn" data-back title="Back to desktop">&larr;</button>
-        <input class="proj-name-bar" id="pj-name" value="${escapeHtml(p.name)}" maxlength="60" />
+        <button class="back-btn" data-back title="${isCompany ? "Back to " + escapeHtml(getProject(parentId).name) : "Back to desktop"}">&larr;</button>
+        ${isCompany ? `<span class="kmono" style="--kc:${accent}">${escapeHtml(p.name.charAt(0).toUpperCase())}</span>` : ""}
+        <input class="proj-name-bar" id="pj-name" value="${escapeHtml(p.name)}" maxlength="80" />
         <div class="proj-tabs">
-          ${projTabsFor(p).map((t) => `
+          ${tabs.map((t) => `
             <button class="proj-tab ${projTab === t.key ? "active" : ""}" data-ptab="${t.key}">${escapeHtml(t.label)}</button>
           `).join("")}
-          ${p.tracker ? "" : `<button class="proj-tab proj-tab-add" data-add-tab title="Add a tracker tab">+</button>`}
+          ${isCompany || p.tracker ? "" : `<button class="proj-tab proj-tab-add" data-add-tab title="Add a hub tab">+</button>`}
         </div>
         <div class="titlebar-actions">
-          <button class="tb-action" data-tb-archive title="Archive project">${ICONS.archive}</button>
-          <button class="tb-action tb-action-danger" data-tb-delete title="Delete project">
+          ${isCompany ? "" : `<button class="tb-action" data-tb-archive title="Archive project">${ICONS.archive}</button>`}
+          <button class="tb-action tb-action-danger" data-tb-delete title="Delete">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
           </button>
         </div>
@@ -2478,17 +2510,17 @@ function renderProjectPage(id, tab) {
 }
 
 function wireProjectPage(id) {
-  const p = getProject(id);
+  const p = containerByRef(id);
+  const isCompany = id.includes("~");
+  const backHash = isCompany ? "#/p/" + id.split("~")[0] : "#/";
   const page = app.querySelector(".projectpage");
 
-  page.querySelector("[data-back]").addEventListener("click", () => (window.location.hash = "#/"));
+  page.querySelector("[data-back]").addEventListener("click", () => (window.location.hash = backHash));
   document.addEventListener("keydown", function esc(e) {
     if (!app.querySelector(".projectpage")) { document.removeEventListener("keydown", esc); return; }
     if (e.key === "Escape" && !e.target.closest("input, textarea, .item-editor")) {
-      const cp = app.querySelector(".company-panel");
-      if (cp) { cp.remove(); return; } // close the company space first
       document.removeEventListener("keydown", esc);
-      window.location.hash = "#/";
+      window.location.hash = backHash;
     }
   });
 
@@ -2527,13 +2559,20 @@ function wireProjectPage(id) {
   wireTabContent(id, page);
 
   // archive / delete
-  page.querySelector("[data-tb-archive]").addEventListener("click", () => {
+  const archiveBtn = page.querySelector("[data-tb-archive]");
+  if (archiveBtn) archiveBtn.addEventListener("click", () => {
     state.archived.push({ type: "project", id });
     persist();
     window.location.hash = "#/";
   });
   page.querySelector("[data-tb-delete]").addEventListener("click", () => {
-    if (confirm(`Delete "${p.name}"? This cannot be undone.`)) {
+    if (!confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
+    if (isCompany) {
+      const parent = getProject(id.split("~")[0]);
+      parent.tracker.items = parent.tracker.items.filter((c) => c.id !== p.id);
+      persist();
+      window.location.hash = backHash;
+    } else {
       state.projects = state.projects.filter((x) => x.id !== id);
       state.collections.forEach((c) => {
         c.items = c.items.filter((i) => !(i.type === "project" && i.id === id));
@@ -2547,7 +2586,7 @@ function wireProjectPage(id) {
 
 /* wiring for whatever tab is currently showing */
 function wireTabContent(id, page) {
-  const p = getProject(id);
+  const p = containerByRef(id);
 
   if (projTab === "notes") {
     const feed = page.querySelector("#notes-feed");
@@ -2674,7 +2713,7 @@ function wireTrackerTab(p, id, page) {
     });
   }
 
-  /* move a card into a stage column (used by drag AND the panel) */
+  /* move a tile into a stage section (drag) */
   function moveCardToStage(card, item, stageKey) {
     item.stage = stageKey;
     persist();
@@ -2686,103 +2725,12 @@ function wireTrackerTab(p, id, page) {
     updateCounts();
   }
 
-  /* click (no drag) → the company's own space slides in */
-  function openCompanyPanel(card, item) {
-    const old = page.querySelector(".company-panel");
-    if (old) old.remove();
-
-    const panel = elFromHtml(`
-      <div class="person-panel company-panel">
-        <button class="panel-close" data-cp-close title="Close">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
-        <div class="person-head">
-          <span class="kmono kmono-lg" style="--kc:${kcolor(item.name)}">${escapeHtml(item.name.charAt(0).toUpperCase())}</span>
-          <input class="person-name" data-cp-name value="${escapeHtml(item.name)}" maxlength="80" />
-        </div>
-        <div class="cp-stages">
-          ${TRACKER_STAGES.map((s) => `
-            <button class="cp-stage ${item.stage === s.key ? "active" : ""}" data-cp-stage="${s.key}" style="--kt:${s.tint}">${s.label}</button>
-          `).join("")}
-        </div>
-        <input class="edit-input" data-cp-link value="${escapeHtml(item.link || "")}" placeholder="Link (site, deck…)" maxlength="500" />
-        <input class="edit-input" data-cp-sum value="${escapeHtml(item.note || "")}" placeholder="One-line summary (shows on the card)" maxlength="140" />
-        <div class="section-title" style="margin-top:16px;">Notes</div>
-        <textarea class="cp-notes" data-cp-notes placeholder="Everything about ${escapeHtml(item.name)}…">${escapeHtml(item.notes || "")}</textarea>
-        <div class="person-foot">
-          <button class="btn btn-danger btn-sm" data-cp-delete>Delete</button>
-        </div>
-      </div>`);
-    page.appendChild(panel);
-
-    const refreshCard = () => { card.innerHTML = kcardInner(item); };
-    const closePanel = () => panel.remove();
-
-    panel.querySelector("[data-cp-close]").addEventListener("click", closePanel);
-
-    const nameIn = panel.querySelector("[data-cp-name]");
-    nameIn.addEventListener("blur", () => {
-      const v = nameIn.value.trim();
-      if (v) item.name = v;
-      persist();
-      refreshCard();
-      panel.querySelector(".kmono-lg").textContent = item.name.charAt(0).toUpperCase();
-      panel.querySelector(".kmono-lg").style.setProperty("--kc", kcolor(item.name));
-    });
-    nameIn.addEventListener("keydown", (e) => { if (e.key === "Enter") nameIn.blur(); });
-
-    // stage pills — the card physically moves on the board as you click
-    panel.querySelectorAll("[data-cp-stage]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        if (btn.dataset.cpStage === item.stage) return;
-        moveCardToStage(card, item, btn.dataset.cpStage);
-        panel.querySelectorAll("[data-cp-stage]").forEach((b) =>
-          b.classList.toggle("active", b.dataset.cpStage === item.stage)
-        );
-      });
-    });
-
-    const linkIn = panel.querySelector("[data-cp-link]");
-    linkIn.addEventListener("blur", () => {
-      const url = linkIn.value.trim();
-      if (url) item.link = /^https?:\/\//i.test(url) ? url : "https://" + url;
-      else delete item.link;
-      persist();
-      refreshCard();
-    });
-
-    const sumIn = panel.querySelector("[data-cp-sum]");
-    sumIn.addEventListener("blur", () => {
-      const v = sumIn.value.trim();
-      if (v) item.note = v; else delete item.note;
-      persist();
-      refreshCard();
-    });
-
-    const notesIn = panel.querySelector("[data-cp-notes]");
-    let nTimer = null;
-    notesIn.addEventListener("input", () => {
-      clearTimeout(nTimer);
-      nTimer = setTimeout(() => { item.notes = notesIn.value; persist(); }, 500);
-    });
-    notesIn.addEventListener("blur", () => { item.notes = notesIn.value; persist(); });
-
-    panel.querySelector("[data-cp-delete]").addEventListener("click", () => {
-      if (!confirm(`Delete "${item.name}"?`)) return;
-      tracker.items = tracker.items.filter((x) => x.id !== item.id);
-      persist();
-      card.remove();
-      updateCounts();
-      closePanel();
-    });
-  }
-
-  /* drag a card between columns — ghost follows the pointer */
+  /* tiles: drag between stages, click to ENTER the company space */
   function wireCard(card) {
     const item = tracker.items.find((x) => x.id === card.dataset.kcard);
 
     card.addEventListener("pointerdown", (e) => {
-      if (e.target.closest("input, button, a") || card.classList.contains("editing")) return;
+      if (e.target.closest("a")) return;
       e.preventDefault();
       card.setPointerCapture(e.pointerId);
 
@@ -2818,17 +2766,14 @@ function wireTrackerTab(p, id, page) {
         card.classList.remove("kcard-src");
         if (hover) hover.classList.remove("kcol-over");
 
-        if (!dragged) { openCompanyPanel(card, item); return; }
+        if (!dragged) {
+          // enter the company's own space
+          window.location.hash = "#/p/" + id + "~" + item.id;
+          return;
+        }
         if (hover) {
           const stage = hover.dataset.stageCol;
-          if (stage !== item.stage) {
-            moveCardToStage(card, item, stage);
-            // keep an open panel's stage pills in sync
-            const openPanel = page.querySelector(".company-panel");
-            if (openPanel) openPanel.querySelectorAll("[data-cp-stage]").forEach((b) =>
-              b.classList.toggle("active", b.dataset.cpStage === item.stage)
-            );
-          }
+          if (stage !== item.stage) moveCardToStage(card, item, stage);
         }
       }
 
@@ -2839,29 +2784,48 @@ function wireTrackerTab(p, id, page) {
 
   page.querySelectorAll(".kcard").forEach(wireCard);
 
-  // quick add → lands on TOP of the Watchlist, no re-render
-  const input = page.querySelector("[data-tk-input]");
-  function add() {
-    const name = input.value.trim();
-    if (!name) return;
-    const item = { id: uid(), name, stage: "watch" };
-    tracker.items.unshift(item);
-    persist();
-    const card = elFromHtml(kcardHtml(item));
-    const list = page.querySelector(`[data-stage-col="watch"] .kcol-list`);
-    list.prepend(card);
-    card.classList.add("kcard-pop");
-    wireCard(card);
-    updateCounts();
-    input.value = "";
-    input.focus();
-  }
-  page.querySelector("[data-tk-add]").addEventListener("click", add);
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+  // floating + button: name it, it lands on top of the Watchlist, then open it
+  page.querySelector("[data-tk-fab]").addEventListener("click", () => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "window-backdrop";
+    backdrop.innerHTML = `
+      <div class="new-form">
+        <h3>Add to ${escapeHtml(tracker.name)}</h3>
+        <input type="text" id="tk-item-name" placeholder="Name (e.g. Revolut)" maxlength="80" />
+        <div class="row">
+          <button class="btn btn-ghost" id="tk-item-cancel">Cancel</button>
+          <button class="btn btn-primary" id="tk-item-add">Add</button>
+        </div>
+      </div>`;
+    app.appendChild(backdrop);
+    const nameInput = backdrop.querySelector("#tk-item-name");
+    nameInput.focus();
+    const close = () => backdrop.remove();
+    const add = () => {
+      const name = nameInput.value.trim();
+      if (!name) { nameInput.focus(); return; }
+      const item = {
+        id: uid(), name, stage: "watch",
+        notesList: [], goals: [], tasks: [], links: [], docs: [],
+      };
+      tracker.items.unshift(item);
+      persist();
+      close();
+      window.location.hash = "#/p/" + id + "~" + item.id; // straight into its space
+    };
+    backdrop.querySelector("#tk-item-add").addEventListener("click", add);
+    backdrop.querySelector("#tk-item-cancel").addEventListener("click", close);
+    backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+    backdrop.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") add();
+      if (e.key === "Escape") close();
+    });
+  });
 
-  // remove the whole tracker tab
+  // remove the whole hub tab
   page.querySelector("[data-tk-delete]").addEventListener("click", () => {
-    if (!confirm(`Delete the "${tracker.name}" tracker and everything on it?`)) return;
+    if (!confirm(`Delete the "${tracker.name}" hub and everything inside it?`)) return;
     delete p.tracker;
     persist();
     renderProjectPage(id, "notes");

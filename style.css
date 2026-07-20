@@ -917,8 +917,82 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 }
 .proj-tab-add:hover { color: var(--text); }
 
-.tracker-addrow { display: flex; gap: 8px; margin-bottom: 16px; }
-.tracker-addrow input { flex: 1; }
+/* ---------- hub layout: stage sections stacked, big entry tiles ---------- */
+
+.hub { display: flex; flex-direction: column; gap: 16px; }
+
+.hub-stage {
+  position: relative;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 16px;
+  padding: 16px 16px 14px;
+  overflow: hidden;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.hub-stage::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--kt), transparent);
+  opacity: 0.8;
+}
+.hub-stage.kcol-over {
+  border-color: color-mix(in srgb, var(--kt) 65%, transparent);
+  background: color-mix(in srgb, var(--kt) 7%, transparent);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--kt) 20%, transparent);
+}
+
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  min-height: 56px;
+}
+
+.ktile { padding: 16px 16px 14px; }
+.ktile-top { margin-bottom: 10px; }
+.ktile .kcard-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; white-space: normal; }
+
+.ktile-sum {
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin-top: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ktile-meta {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 10px;
+}
+
+/* floating add button */
+.fab {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #fff;
+  color: #101013;
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  z-index: 16;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.fab:hover { transform: scale(1.08) translateY(-2px); box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6); }
+.fab:active { transform: scale(0.96); }
 
 .kanban {
   display: grid;
