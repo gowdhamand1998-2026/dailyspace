@@ -969,9 +969,11 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
         <button class="dock-btn" data-tip="Archive" data-archive>${ICONS.archive}
           ${state.archived.length ? `<span class="archive-count">${state.archived.length}</span>` : ""}
         </button>
+        <div class="dock-sep mobile-only"></div>
+        <button class="dock-btn mobile-only" data-dock-apps title="Shortcuts">${ICONS.shuffle}</button>
       </div>
 
-      <!-- mobile only: one floating button expands into the widget shortcuts -->
+      <!-- mobile only: the dock's shortcuts button pops these up above it -->
       <div class="fab-wrap" data-fab-wrap>
         <div class="fab-menu">
           ${Object.entries(WIDGETS).map(([kind, w]) => {
@@ -992,10 +994,6 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
             </button>`;
           })()}
         </div>
-        <button class="fab" data-fab title="Shortcuts">
-          <span class="fab-open-ic">${ICONS.shuffle}</span>
-          <span class="fab-close-ic">&times;</span>
-        </button>
       </div>
     </div>
     ${widgetKind ? widgetWindowHtml(widgetKind) : ""}
@@ -1048,10 +1046,11 @@ function wireDesktop() {
     });
   });
 
-  // mobile FAB: toggle open, navigate on item tap, close on outside tap
+  // mobile shortcuts: dock button pops the menu above the dock
   const fabWrap = app.querySelector("[data-fab-wrap]");
-  if (fabWrap) {
-    fabWrap.querySelector("[data-fab]").addEventListener("click", (e) => {
+  const appsBtn = app.querySelector("[data-dock-apps]");
+  if (fabWrap && appsBtn) {
+    appsBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       fabWrap.classList.toggle("open");
     });
@@ -1059,7 +1058,7 @@ function wireDesktop() {
       b.addEventListener("click", () => (window.location.hash = b.dataset.fabGo))
     );
     desktop.addEventListener("pointerdown", (e) => {
-      if (!e.target.closest("[data-fab-wrap]")) fabWrap.classList.remove("open");
+      if (!e.target.closest("[data-fab-wrap], [data-dock-apps]")) fabWrap.classList.remove("open");
     });
   }
 
