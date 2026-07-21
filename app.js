@@ -100,6 +100,42 @@ const WIDGETS = {
 };
 
 /* fills in any fields older / imported data might be missing */
+/* fill in organs for tracker items at any depth. depth 1 = a secondary
+   (direct child of a top-level project): those get a permanent Tracker by
+   default. Deeper items are leaves unless they already have a tracker. */
+function ensureSubtree(items, depth) {
+  items.forEach((c) => {
+    if (c.stage === "active") c.stage = "progress"; // merged stages
+    if (!c.stage) c.stage = "watch";
+    if (!c.notesList) c.notesList = [];
+    if (!c.goals) c.goals = [];
+    if (!c.tasks) c.tasks = [];
+    if (!c.links) c.links = [];
+    if (c.masterLink === undefined) c.masterLink = "";
+    if (c.masterName === undefined) c.masterName = "";
+    if (!c.docs) c.docs = [];
+    // old side-panel notes become the first note card
+    if (c.notes && c.notes.trim()) {
+      c.notesList.unshift({ id: uid(), text: c.notes, createdAt: new Date().toISOString() });
+      delete c.notes;
+    }
+    // secondaries carry a Tracker by default; it can't be removed (no delete UI)
+    if (depth === 1 && !c.tracker) c.tracker = { name: "Tracker", items: [] };
+    [...c.goals, ...c.tasks].forEach((t) => {
+      if (!t.createdAt) t.createdAt = new Date().toISOString();
+      if (t.done && !t.closedAt) t.closedAt = new Date().toISOString();
+    });
+    c.notesList.forEach((n) => {
+      if (!n.createdAt) n.createdAt = c.createdAt || new Date().toISOString();
+      if (!n.updatedAt) n.updatedAt = n.createdAt;
+    });
+    if (c.tracker) {
+      if (!c.tracker.items) c.tracker.items = [];
+      ensureSubtree(c.tracker.items, depth + 1);
+    }
+  });
+}
+
 function ensureDefaults(s) {
   if (!s.projects) s.projects = [];
   s.projects.forEach((p, i) => {
@@ -115,22 +151,14 @@ function ensureDefaults(s) {
     }
     if (!p.docs) p.docs = [];   // (legacy) standalone project docs
     if (!p.links) p.links = []; // project-level links
+    if (p.masterLink === undefined) p.masterLink = ""; // the one main link for the project
+    if (p.masterName === undefined) p.masterName = ""; // display name, auto-pulled from the link
 
-    // companies in a tracker are full sub-projects: give them the same organs
+    // companies in a tracker are full sub-projects: give them the same organs,
+    // recursively, and hand every secondary its default Tracker
     if (p.tracker) {
-      p.tracker.items.forEach((c) => {
-        if (c.stage === "active") c.stage = "progress"; // merged stages
-        if (!c.notesList) c.notesList = [];
-        if (!c.goals) c.goals = [];
-        if (!c.tasks) c.tasks = [];
-        if (!c.links) c.links = [];
-        if (!c.docs) c.docs = [];
-        // old side-panel notes become the first note card
-        if (c.notes && c.notes.trim()) {
-          c.notesList.unshift({ id: uid(), text: c.notes, createdAt: new Date().toISOString() });
-          delete c.notes;
-        }
-      });
+      if (!p.tracker.items) p.tracker.items = [];
+      ensureSubtree(p.tracker.items, 1);
     }
 
     // timestamps: every task/goal gets a createdAt; every done one gets a closedAt
@@ -2382,6 +2410,179 @@ let projTab = "notes";
 let projTabFor = null; // which project the remembered tab belongs to
 
 /* content of the currently selected tab */
+/* the one "master folder" link for a project — paste once, sits pinned at
+   the top of the Docs / Links tab. Empty → a paste field; set → a big card. */
+const MF_FOLDER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const MF_EDIT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+
+function mfHost(u) {
+  try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; }
+}
+
+/* best-effort readable name from a URL, so the user never types it from scratch.
+   Links that carry their title (Notion, GitHub, Figma, most slugged pages) give
+   the real name; Google Drive/Docs links only hold an ID, so they fall back to a
+   friendly by-type label the user can rename in one click. */
+function nameFromUrl(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch { return ""; }
+  const host = u.hostname.replace(/^www\./, "");
+  const segs = u.pathname.split("/").filter(Boolean).map((s) => {
+    try { return decodeURIComponent(s); } catch { return s; }
+  });
+  const prettify = (s) =>
+    s.replace(/\.[a-z0-9]{1,5}$/i, "")   // drop a file extension
+     .replace(/[-_+]+/g, " ")
+     .replace(/\s+/g, " ")
+     .trim()
+     .replace(/\b\w/g, (c) => c.toUpperCase());
+  // an opaque token: pure digits, a long low-word-density hash, or a short
+  // no-separator mix of upper+lower+digits (typical random slug ID)
+  const looksLikeId = (s) =>
+    /^\d+$/.test(s) ||
+    (/^[A-Za-z0-9_-]{15,}$/.test(s) && !/ /.test(s) && /\d/.test(s) &&
+     ((s.match(/[A-Za-z]/g) || []).length < s.length * 0.55)) ||
+    (/^[A-Za-z0-9]{4,24}$/.test(s) && /\d/.test(s) && /[a-z]/.test(s) && /[A-Z]/.test(s));
+
+  if (host === "docs.google.com") {
+    return { document: "Google Doc", spreadsheets: "Google Sheet",
+             presentation: "Google Slides", forms: "Google Form" }[segs[0]] || "Google Doc";
+  }
+  if (host === "drive.google.com") return segs.includes("folders") ? "Drive folder" : "Drive file";
+  if (host === "sheets.google.com") return "Google Sheet";
+
+  if (host.endsWith("notion.so") || host.endsWith("notion.site")) {
+    const last = segs[segs.length - 1] || "";
+    const name = prettify(last.replace(/-?[0-9a-f]{32}$/i, "")); // strip trailing page id
+    return name || "Notion page";
+  }
+  if (host === "github.com" && segs.length >= 2) return segs[0] + "/" + segs[1];
+  if (host.endsWith("figma.com") && segs.length >= 3) return prettify(segs[2]) || "Figma file";
+
+  // generic: last readable path segment wins (skip 1-char route bits like /b/)
+  for (let i = segs.length - 1; i >= 0; i--) {
+    const s = segs[i];
+    if (s && s.length >= 2 && !looksLikeId(s) && /[a-zA-Z]/.test(s)) {
+      const name = prettify(s);
+      if (name.length >= 2) return name;
+    }
+  }
+  // nothing usable in the path → the service name (e.g. "Trello", "Airtable")
+  const base = host.split(".").slice(-2, -1)[0] || host;
+  return base.replace(/\b\w/, (c) => c.toUpperCase());
+}
+
+function masterFolderHtml(p) {
+  const url = (p.masterLink || "").trim();
+  if (url) {
+    const name = (p.masterName || "").trim() || nameFromUrl(url) || mfHost(url);
+    return `
+      <div class="master-folder is-set">
+        <a class="mf-iconlink" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="Open">
+          <span class="mf-icon mf-icon-folder">${MF_FOLDER_SVG}</span>
+        </a>
+        <span class="mf-body">
+          <span class="mf-title">${escapeHtml(mfHost(url) || "Master folder")}</span>
+          <input class="mf-name" data-mf-name value="${escapeHtml(name)}" maxlength="120"
+                 spellcheck="false" title="Rename — pulled from the link, edit if you like" />
+        </span>
+        <a class="mf-open" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open&nbsp;&#8599;</a>
+        <button class="mf-edit" data-mf-edit title="Change the link">${MF_EDIT_SVG}</button>
+      </div>`;
+  }
+  return `
+    <div class="master-folder is-empty">
+      <span class="mf-icon mf-icon-empty">${MF_FOLDER_SVG}</span>
+      <input class="mf-input" data-mf-input type="text" placeholder="Paste the master link for this project…" maxlength="500" />
+    </div>`;
+}
+
+/* wire the master-folder block in whatever state it's currently rendered */
+function wireMasterFolder(page, p, id) {
+  let wrap = page.querySelector(".master-folder");
+  if (!wrap) return;
+
+  // "" clears the link; a bare domain gets https://; anything unparseable is rejected
+  const normalize = (v) => {
+    let url = (v || "").trim();
+    if (!url) return "";
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    try { new URL(url); } catch { return null; }
+    return url;
+  };
+
+  const rerender = () => {
+    const fresh = elFromHtml(masterFolderHtml(p));
+    wrap.replaceWith(fresh);
+    wireMasterFolder(page, p, id);
+  };
+
+  const saveFrom = (input) => {
+    const res = normalize(input.value);
+    if (res === null) { input.focus(); return; } // invalid — stay in edit mode
+    if (res === (p.masterLink || "")) { rerender(); return; } // unchanged
+    p.masterLink = res;
+    // the name follows the link: auto-fill it from the new URL (blank when cleared)
+    p.masterName = res ? nameFromUrl(res) : "";
+    persist();
+    rerender();
+  };
+
+  const wireInput = (input) => {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); saveFrom(input); }
+    });
+    input.addEventListener("blur", () => saveFrom(input));
+    // pasting a link should commit it right away
+    input.addEventListener("paste", () => setTimeout(() => saveFrom(input), 0));
+  };
+
+  const emptyInput = wrap.querySelector("[data-mf-input]");
+  if (emptyInput) wireInput(emptyInput);
+
+  // editable name (set state): rename in place; empty falls back to the derived name
+  const nameInput = wrap.querySelector("[data-mf-name]");
+  if (nameInput) {
+    const saveName = () => {
+      const v = nameInput.value.trim();
+      const fallback = nameFromUrl(p.masterLink || "") || mfHost(p.masterLink || "");
+      const next = v || fallback;
+      if (next !== (p.masterName || "")) { p.masterName = next; persist(); }
+      if (nameInput.value !== next) nameInput.value = next; // reflect the fallback
+    };
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); nameInput.blur(); }
+    });
+    nameInput.addEventListener("blur", saveName);
+    // clicking the name to rename shouldn't feel like a dead link — select all on focus
+    nameInput.addEventListener("focus", () => nameInput.select());
+  }
+
+  const editBtn = wrap.querySelector("[data-mf-edit]");
+  if (editBtn) {
+    editBtn.addEventListener("click", () => {
+      wrap.className = "master-folder is-empty";
+      wrap.innerHTML = `
+        <span class="mf-icon mf-icon-empty">${MF_FOLDER_SVG}</span>
+        <input class="mf-input" data-mf-input type="text" maxlength="500" value="${escapeHtml(p.masterLink || "")}" />
+        <button class="mf-clear" data-mf-clear title="Remove master link">&times;</button>`;
+      const inp = wrap.querySelector("[data-mf-input]");
+      wireInput(inp);
+      inp.focus();
+      inp.select();
+      // preventDefault on mousedown keeps the input focused so its blur-save
+      // doesn't fire and detach this button before the click lands
+      wrap.querySelector("[data-mf-clear]").addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        p.masterLink = "";
+        p.masterName = "";
+        persist();
+        rerender();
+      });
+    });
+  }
+}
+
 function projTabBodyHtml(p) {
   if (projTab === "notes") {
     return `
@@ -2399,6 +2600,7 @@ function projTabBodyHtml(p) {
   }
   if (projTab === "tracker" && p.tracker) {
     return `
+      <button class="crow crow-add hub-add" data-tk-fab>+ Add to ${escapeHtml(p.tracker.name)}</button>
       <div class="hub">
         ${TRACKER_STAGES.map((s) => `
           <section class="hub-stage" data-stage-col="${s.key}" style="--kt:${s.tint}">
@@ -2410,17 +2612,14 @@ function projTabBodyHtml(p) {
               ${p.tracker.items.filter((i) => i.stage === s.key).map(kcardHtml).join("")}
             </div>
           </section>`).join("")}
-      </div>
-      <div class="tracker-foot">
-        <button class="btn btn-danger btn-sm" data-tk-delete>Delete this hub</button>
-      </div>
-      <button class="fab" data-tk-fab title="Add">+</button>`;
+      </div>`;
   }
   const linked = [...p.tasks, ...p.goals].filter((t) => t.link);
   const hostOf = (url) => {
     try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
   };
   return `
+    ${masterFolderHtml(p)}
     <div class="panel">
       <div class="section-title">Docs / Links</div>
       <div class="collection-list" style="padding-top:6px;">
@@ -2455,13 +2654,19 @@ const TRACKER_STAGES = [
   { key: "closed", label: "Closed", tint: "#94a3b8" },
 ];
 
-/* resolve "pid" → project, or "pid~cid" → a company sub-project inside it */
+/* resolve "pid" → project, or "pid~cid~…" → a sub-project nested any depth deep */
 function containerByRef(ref) {
-  const [pid, cid] = ref.split("~");
-  const p = getProject(pid);
-  if (!p) return null;
-  if (!cid) return p;
-  return (p.tracker && p.tracker.items.find((i) => i.id === cid)) || null;
+  const parts = ref.split("~");
+  let node = getProject(parts[0]);
+  for (let i = 1; i < parts.length && node; i++) {
+    node = node.tracker && node.tracker.items.find((x) => x.id === parts[i]);
+  }
+  return node || null;
+}
+
+/* the ref of a sub-project's parent container ("" for a top-level project) */
+function parentRefOf(ref) {
+  return ref.includes("~") ? ref.split("~").slice(0, -1).join("~") : null;
 }
 
 /* tracker leads the tab bar when it exists */
@@ -2500,29 +2705,29 @@ function kcardHtml(i) {
 function renderProjectPage(id, tab) {
   const p = containerByRef(id);
   const isCompany = id.includes("~");
-  const parentId = isCompany ? id.split("~")[0] : null;
+  const parentId = parentRefOf(id);
   const accent = isCompany ? kcolor(p.name) : accentFor(id);
 
   if (projTabFor !== id) {
+    // top-level projects open on their tracker; sub-projects open on Notes
     projTab = (!isCompany && p.tracker) ? "tracker" : "notes";
     projTabFor = id;
   }
   if (tab) projTab = tab;
 
-  const tabs = isCompany ? PROJ_TABS : projTabsFor(p);
+  const tabs = projTabsFor(p);
   const body = projTabBodyHtml(p);
 
   const pageHtml = `
     <div class="projectpage ${isCompany ? "companypage" : ""}" style="--pa:${accent}">
       <div class="notepage-bar">
-        <button class="back-btn" data-back title="${isCompany ? "Back to " + escapeHtml(getProject(parentId).name) : "Back to desktop"}">&larr;</button>
+        <button class="back-btn" data-back title="${isCompany ? "Back to " + escapeHtml(containerByRef(parentId).name) : "Back to desktop"}">&larr;</button>
         ${isCompany ? `<span class="kmono" style="--kc:${accent}">${escapeHtml(p.name.charAt(0).toUpperCase())}</span>` : ""}
         <input class="proj-name-bar" id="pj-name" value="${escapeHtml(p.name)}" maxlength="80" />
         <div class="proj-tabs">
           ${tabs.map((t) => `
             <button class="proj-tab ${projTab === t.key ? "active" : ""}" data-ptab="${t.key}">${escapeHtml(t.label)}</button>
           `).join("")}
-          ${isCompany || p.tracker ? "" : `<button class="proj-tab proj-tab-add" data-add-tab title="Add a hub tab">+</button>`}
         </div>
         <div class="titlebar-actions">
           ${isCompany ? "" : `<button class="tb-action" data-tb-archive title="Archive project">${ICONS.archive}</button>`}
@@ -2554,7 +2759,7 @@ function renderProjectPage(id, tab) {
 function wireProjectPage(id) {
   const p = containerByRef(id);
   const isCompany = id.includes("~");
-  const backHash = isCompany ? "#/p/" + id.split("~")[0] : "#/";
+  const backHash = isCompany ? "#/p/" + parentRefOf(id) : "#/";
   const page = app.querySelector(".projectpage");
 
   page.querySelector("[data-back]").addEventListener("click", () => (window.location.hash = backHash));
@@ -2594,10 +2799,6 @@ function wireProjectPage(id) {
   }
   bindField("#pj-name", (v) => { p.name = v || p.name; });
 
-  // "+" → enable a tracker tab for this project
-  const addTab = page.querySelector("[data-add-tab]");
-  if (addTab) addTab.addEventListener("click", () => showAddTrackerModal(p, id));
-
   wireTabContent(id, page);
 
   // archive / delete
@@ -2610,7 +2811,7 @@ function wireProjectPage(id) {
   page.querySelector("[data-tb-delete]").addEventListener("click", () => {
     if (!confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
     if (isCompany) {
-      const parent = getProject(id.split("~")[0]);
+      const parent = containerByRef(parentRefOf(id));
       parent.tracker.items = parent.tracker.items.filter((c) => c.id !== p.id);
       persist();
       window.location.hash = backHash;
@@ -2691,6 +2892,7 @@ function wireTabContent(id, page) {
   } else if (projTab === "tracker" && p.tracker) {
     wireTrackerTab(p, id, page);
   } else if (projTab === "links") {
+    wireMasterFolder(page, p, id);
     page.querySelector("[data-add-plink]").addEventListener("click", () => showAddProjectLinkModal(p, id, page));
     page.querySelectorAll("[data-del-plink]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
@@ -2706,44 +2908,6 @@ function wireTabContent(id, page) {
 }
 
 /* ---------- tracker tab (pipeline board) ---------- */
-
-function showAddTrackerModal(p, id) {
-  const backdrop = document.createElement("div");
-  backdrop.className = "window-backdrop";
-  backdrop.innerHTML = `
-    <div class="new-form">
-      <h3>Add a tracker tab</h3>
-      <p class="form-note">A board with Active / In Progress / Closed columns — track companies, deals, candidates, anything.</p>
-      <input type="text" id="tk-name" placeholder="Tab name (e.g. Companies)" maxlength="30" />
-      <div class="row">
-        <button class="btn btn-ghost" id="tk-cancel">Cancel</button>
-        <button class="btn btn-primary" id="tk-create">Create</button>
-      </div>
-    </div>
-  `;
-  app.appendChild(backdrop);
-
-  const nameInput = backdrop.querySelector("#tk-name");
-  nameInput.focus();
-
-  function close() { backdrop.remove(); }
-
-  function create() {
-    p.tracker = { name: nameInput.value.trim() || "Tracker", items: [] };
-    persist();
-    close();
-    renderProjectPage(id, "tracker");
-  }
-
-  backdrop.querySelector("#tk-create").addEventListener("click", create);
-  backdrop.querySelector("#tk-cancel").addEventListener("click", close);
-  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
-  backdrop.addEventListener("keydown", (e) => {
-    e.stopPropagation();
-    if (e.key === "Enter") create();
-    if (e.key === "Escape") close();
-  });
-}
 
 function wireTrackerTab(p, id, page) {
   const tracker = p.tracker;
@@ -2849,7 +3013,11 @@ function wireTrackerTab(p, id, page) {
       const item = {
         id: uid(), name, stage: "watch",
         notesList: [], goals: [], tasks: [], links: [], docs: [],
+        masterLink: "", masterName: "",
       };
+      // a direct child of a top-level project is a secondary → give it its
+      // permanent Tracker right away (deeper items stay leaves)
+      if (!id.includes("~")) item.tracker = { name: "Tracker", items: [] };
       tracker.items.unshift(item);
       persist();
       close();
@@ -2865,13 +3033,6 @@ function wireTrackerTab(p, id, page) {
     });
   });
 
-  // remove the whole hub tab
-  page.querySelector("[data-tk-delete]").addEventListener("click", () => {
-    if (!confirm(`Delete the "${tracker.name}" hub and everything inside it?`)) return;
-    delete p.tracker;
-    persist();
-    renderProjectPage(id, "notes");
-  });
 }
 
 /* small modal: add a link directly to the project */
