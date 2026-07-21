@@ -969,6 +969,33 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
           ${state.archived.length ? `<span class="archive-count">${state.archived.length}</span>` : ""}
         </button>
       </div>
+
+      <!-- mobile only: one floating button expands into the widget shortcuts -->
+      <div class="fab-wrap" data-fab-wrap>
+        <div class="fab-menu">
+          ${Object.entries(WIDGETS).map(([kind, w]) => {
+            const n = taggedTasks(kind).filter((x) => !x.task.done).length;
+            return `
+            <button class="fab-item" data-fab-go="#/w/${kind}" style="--wt:${w.tint}">
+              <span class="fab-label">${w.label}</span>
+              <span class="fab-icon">${w.icon}${n ? `<i class="fab-count">${n}</i>` : ""}</span>
+            </button>`;
+          }).join("")}
+          ${(() => {
+            const n = state.people.filter((per) =>
+              tasksForPerson(per.id).some((x) => !x.task.done)).length;
+            return `
+            <button class="fab-item" data-fab-go="#/people" style="--wt:#f472b6">
+              <span class="fab-label">People</span>
+              <span class="fab-icon">${ICONS.users}${n ? `<i class="fab-count">${n}</i>` : ""}</span>
+            </button>`;
+          })()}
+        </div>
+        <button class="fab" data-fab title="Shortcuts">
+          <span class="fab-open-ic">${ICONS.shuffle}</span>
+          <span class="fab-close-ic">&times;</span>
+        </button>
+      </div>
     </div>
     ${widgetKind ? widgetWindowHtml(widgetKind) : ""}
     ${collectionId ? collectionHtml(collectionId) : ""}
@@ -1019,6 +1046,21 @@ function wireDesktop() {
       updateTimebar();
     });
   });
+
+  // mobile FAB: toggle open, navigate on item tap, close on outside tap
+  const fabWrap = app.querySelector("[data-fab-wrap]");
+  if (fabWrap) {
+    fabWrap.querySelector("[data-fab]").addEventListener("click", (e) => {
+      e.stopPropagation();
+      fabWrap.classList.toggle("open");
+    });
+    fabWrap.querySelectorAll("[data-fab-go]").forEach((b) =>
+      b.addEventListener("click", () => (window.location.hash = b.dataset.fabGo))
+    );
+    desktop.addEventListener("pointerdown", (e) => {
+      if (!e.target.closest("[data-fab-wrap]")) fabWrap.classList.remove("open");
+    });
+  }
 
   // dock
   app.querySelector("[data-dock-add]").addEventListener("click", showAddChooser);
