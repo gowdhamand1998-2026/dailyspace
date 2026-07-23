@@ -1468,7 +1468,7 @@ function showOpenLinkModal(link) {
   });
   backdrop.querySelector("#ol-cancel").addEventListener("click", close);
   backdrop.querySelector("#ol-remove").addEventListener("click", () => {
-    if (confirm(`Remove "${link.name}" from the desktop?`)) {
+    showConfirm({ title: "Remove link?", message: `Remove "${link.name}" from the desktop?`, confirmLabel: "Remove" }, () => {
       state.links = state.links.filter((l) => l.id !== link.id);
       state.collections.forEach((c) => {
         c.items = c.items.filter((i) => !(i.type === "link" && i.id === link.id));
@@ -1477,7 +1477,7 @@ function showOpenLinkModal(link) {
       persist();
       close();
       route();
-    }
+    });
   });
   backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
   backdrop.addEventListener("keydown", (e) => {
@@ -1911,7 +1911,7 @@ function wirePersonPanel() {
   });
 
   panel.querySelector("[data-person-delete]").addEventListener("click", () => {
-    if (confirm(`Remove "${per.name}"? Their task connections will be cleared.`)) {
+    showConfirm({ title: "Remove person?", message: `Remove "${per.name}"? Their task connections will be cleared.`, confirmLabel: "Remove" }, () => {
       state.people = state.people.filter((x) => x.id !== per.id);
       state.peopleEdges = state.peopleEdges.filter((e) => e.a !== per.id && e.b !== per.id);
       state.projects.forEach((p) =>
@@ -1925,7 +1925,7 @@ function wirePersonPanel() {
       selectedPersonId = null;
       persist();
       renderPeoplePage(); // structural: the whole orbit re-arranges
-    }
+    });
   });
 }
 
@@ -2304,12 +2304,12 @@ function wireCollection(id) {
 
   // delete the collection; its contents return to the desktop
   backdrop.querySelector("#col-delete").addEventListener("click", () => {
-    if (confirm(`Delete "${c.name}"? Its contents go back to the desktop.`)) {
+    showConfirm({ title: "Delete collection?", message: `Delete "${c.name}"? Its contents go back to the desktop.` }, () => {
       state.collections = state.collections.filter((x) => x.id !== id);
       state.archived = state.archived.filter((a) => !(a.type === "collection" && a.id === id));
       persist();
       close();
-    }
+    });
   });
 }
 
@@ -2475,16 +2475,14 @@ function nameFromUrl(rawUrl) {
 function masterFolderHtml(p) {
   const url = (p.masterLink || "").trim();
   if (url) {
-    const name = (p.masterName || "").trim() || nameFromUrl(url) || mfHost(url);
     return `
       <div class="master-folder is-set">
         <a class="mf-iconlink" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="Open">
           <span class="mf-icon mf-icon-folder">${MF_FOLDER_SVG}</span>
         </a>
         <span class="mf-body">
-          <span class="mf-title">${escapeHtml(mfHost(url) || "Master folder")}</span>
-          <input class="mf-name" data-mf-name value="${escapeHtml(name)}" maxlength="120"
-                 spellcheck="false" title="Rename — pulled from the link, edit if you like" />
+          <span class="mf-maintitle">Master folder</span>
+          <span class="mf-sub">${escapeHtml(mfHost(url) || url)}</span>
         </span>
         <a class="mf-open" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open&nbsp;&#8599;</a>
         <button class="mf-edit" data-mf-edit title="Change the link">${MF_EDIT_SVG}</button>
@@ -2540,24 +2538,6 @@ function wireMasterFolder(page, p, id) {
   const emptyInput = wrap.querySelector("[data-mf-input]");
   if (emptyInput) wireInput(emptyInput);
 
-  // editable name (set state): rename in place; empty falls back to the derived name
-  const nameInput = wrap.querySelector("[data-mf-name]");
-  if (nameInput) {
-    const saveName = () => {
-      const v = nameInput.value.trim();
-      const fallback = nameFromUrl(p.masterLink || "") || mfHost(p.masterLink || "");
-      const next = v || fallback;
-      if (next !== (p.masterName || "")) { p.masterName = next; persist(); }
-      if (nameInput.value !== next) nameInput.value = next; // reflect the fallback
-    };
-    nameInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); nameInput.blur(); }
-    });
-    nameInput.addEventListener("blur", saveName);
-    // clicking the name to rename shouldn't feel like a dead link — select all on focus
-    nameInput.addEventListener("focus", () => nameInput.select());
-  }
-
   const editBtn = wrap.querySelector("[data-mf-edit]");
   if (editBtn) {
     editBtn.addEventListener("click", () => {
@@ -2574,10 +2554,12 @@ function wireMasterFolder(page, p, id) {
       // doesn't fire and detach this button before the click lands
       wrap.querySelector("[data-mf-clear]").addEventListener("mousedown", (e) => {
         e.preventDefault();
-        p.masterLink = "";
-        p.masterName = "";
-        persist();
-        rerender();
+        showConfirm({ title: "Remove master link?", message: "Remove the master folder link for this project?", confirmLabel: "Remove" }, () => {
+          p.masterLink = "";
+          p.masterName = "";
+          persist();
+          rerender();
+        });
       });
     });
   }
@@ -2629,6 +2611,7 @@ function projTabBodyHtml(p) {
             <span class="crow-thumb crow-linkthumb"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>
             <span class="crow-name">${escapeHtml(l.name)}</span>
             <span class="crow-kind">${escapeHtml(hostOf(l.url))}</span>
+            <button class="crow-edit" data-edit-plink="${l.id}" data-tip="Edit link">${CROW_EDIT_SVG}</button>
             <button class="crow-remove" data-del-plink="${l.id}" data-tip="Remove link">&times;</button>
           </a>`).join("")}
         ${linked.map((t) => `
@@ -2809,21 +2792,22 @@ function wireProjectPage(id) {
     window.location.hash = "#/";
   });
   page.querySelector("[data-tb-delete]").addEventListener("click", () => {
-    if (!confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
-    if (isCompany) {
-      const parent = containerByRef(parentRefOf(id));
-      parent.tracker.items = parent.tracker.items.filter((c) => c.id !== p.id);
-      persist();
-      window.location.hash = backHash;
-    } else {
-      state.projects = state.projects.filter((x) => x.id !== id);
-      state.collections.forEach((c) => {
-        c.items = c.items.filter((i) => !(i.type === "project" && i.id === id));
-      });
-      state.archived = state.archived.filter((a) => !(a.type === "project" && a.id === id));
-      persist();
-      window.location.hash = "#/";
-    }
+    showConfirm({ title: isCompany ? "Delete sub-project?" : "Delete project?", message: `Delete "${p.name}"? This cannot be undone.` }, () => {
+      if (isCompany) {
+        const parent = containerByRef(parentRefOf(id));
+        parent.tracker.items = parent.tracker.items.filter((c) => c.id !== p.id);
+        persist();
+        window.location.hash = backHash;
+      } else {
+        state.projects = state.projects.filter((x) => x.id !== id);
+        state.collections.forEach((c) => {
+          c.items = c.items.filter((i) => !(i.type === "project" && i.id === id));
+        });
+        state.archived = state.archived.filter((a) => !(a.type === "project" && a.id === id));
+        persist();
+        window.location.hash = "#/";
+      }
+    });
   });
 }
 
@@ -2865,10 +2849,11 @@ function wireTabContent(id, page) {
       });
 
       card.querySelector("[data-delnote]").addEventListener("click", () => {
-        if (!confirm("Delete this note?")) return;
-        p.notesList = p.notesList.filter((n) => n.id !== note.id);
-        persist();
-        card.remove(); // in place, no flash
+        showConfirm({ title: "Delete note?", message: "Are you sure you want to delete this note?" }, () => {
+          p.notesList = p.notesList.filter((n) => n.id !== note.id);
+          persist();
+          card.remove(); // in place, no flash
+        });
       });
     }
 
@@ -2893,15 +2878,26 @@ function wireTabContent(id, page) {
     wireTrackerTab(p, id, page);
   } else if (projTab === "links") {
     wireMasterFolder(page, p, id);
-    page.querySelector("[data-add-plink]").addEventListener("click", () => showAddProjectLinkModal(p, id, page));
+    page.querySelector("[data-add-plink]").addEventListener("click", () => showProjectLinkModal(p, id, page));
+    // edit a link (rename / change URL)
+    page.querySelectorAll("[data-edit-plink]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const link = p.links.find((x) => x.id === btn.dataset.editPlink);
+        if (link) showProjectLinkModal(p, id, page, link);
+      });
+    });
     page.querySelectorAll("[data-del-plink]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!confirm("Remove this link?")) return;
-        p.links = p.links.filter((x) => x.id !== btn.dataset.delPlink);
-        persist();
-        btn.closest(".crow").remove(); // in place
+        const link = p.links.find((x) => x.id === btn.dataset.delPlink);
+        showConfirm({ title: "Remove link?", message: `Remove "${link ? link.name : "this link"}" from this project?`, confirmLabel: "Remove" }, () => {
+          p.links = p.links.filter((x) => x.id !== btn.dataset.delPlink);
+          persist();
+          btn.closest(".crow").remove(); // in place
+        });
       });
     });
   }
@@ -3036,17 +3032,52 @@ function wireTrackerTab(p, id, page) {
 }
 
 /* small modal: add a link directly to the project */
-function showAddProjectLinkModal(p, id, page) {
+/* one styled confirmation dialog for every destructive action in the app.
+   showConfirm({title, message, confirmLabel, danger}, onConfirm) — the callback
+   runs only if the user confirms. Replaces the native browser confirm(). */
+function showConfirm(opts, onConfirm) {
+  const o = typeof opts === "string" ? { message: opts } : (opts || {});
+  const backdrop = document.createElement("div");
+  backdrop.className = "window-backdrop";
+  backdrop.innerHTML = `
+    <div class="new-form confirm-dialog">
+      <h3>${escapeHtml(o.title || "Are you sure?")}</h3>
+      <p class="form-note">${escapeHtml(o.message || "Are you sure you want to delete this? This can't be undone.")}</p>
+      <div class="row">
+        <button class="btn btn-ghost" data-cf-cancel>Cancel</button>
+        <button class="btn ${o.danger === false ? "btn-primary" : "btn-danger"}" data-cf-ok>${escapeHtml(o.confirmLabel || "Delete")}</button>
+      </div>
+    </div>`;
+  app.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  const go = () => { close(); if (typeof onConfirm === "function") onConfirm(); };
+  backdrop.querySelector("[data-cf-cancel]").addEventListener("click", close);
+  const okBtn = backdrop.querySelector("[data-cf-ok]");
+  okBtn.addEventListener("click", go);
+  okBtn.focus();
+  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Escape") close();
+    if (e.key === "Enter") go();
+  });
+}
+
+/* pencil icon for the inline "edit link" button */
+const CROW_EDIT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+
+/* add OR edit a project link — pass an existing link object to edit it in place */
+function showProjectLinkModal(p, id, page, existing) {
   const backdrop = document.createElement("div");
   backdrop.className = "window-backdrop";
   backdrop.innerHTML = `
     <div class="new-form">
-      <h3>Add link</h3>
-      <input type="text" id="pl-name" placeholder="Name" maxlength="60" />
-      <input type="text" id="pl-url" placeholder="URL (e.g. figma.com/file/…)" maxlength="500" />
+      <h3>${existing ? "Edit link" : "Add link"}</h3>
+      <input type="text" id="pl-name" placeholder="Name" maxlength="60" value="${existing ? escapeHtml(existing.name || "") : ""}" />
+      <input type="text" id="pl-url" placeholder="URL (e.g. figma.com/file/…)" maxlength="500" value="${existing ? escapeHtml(existing.url || "") : ""}" />
       <div class="row">
         <button class="btn btn-ghost" id="pl-cancel">Cancel</button>
-        <button class="btn btn-primary" id="pl-add">Add</button>
+        <button class="btn btn-primary" id="pl-add">${existing ? "Save" : "Add"}</button>
       </div>
     </div>
   `;
@@ -3058,7 +3089,7 @@ function showAddProjectLinkModal(p, id, page) {
 
   function close() { backdrop.remove(); }
 
-  function add() {
+  function save() {
     const name = nameInput.value.trim();
     let url = urlInput.value.trim();
     if (!url) { urlInput.focus(); return; }
@@ -3067,7 +3098,12 @@ function showAddProjectLinkModal(p, id, page) {
 
     let host = "";
     try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
-    p.links.unshift({ id: uid(), name: name || host, url });
+    if (existing) {
+      existing.name = name || host;
+      existing.url = url;
+    } else {
+      p.links.unshift({ id: uid(), name: name || host, url });
+    }
     persist();
     close();
     // refresh just the tab content — same seamless swap as tab switching
@@ -3076,12 +3112,12 @@ function showAddProjectLinkModal(p, id, page) {
     wireTabContent(id, page);
   }
 
-  backdrop.querySelector("#pl-add").addEventListener("click", add);
+  backdrop.querySelector("#pl-add").addEventListener("click", save);
   backdrop.querySelector("#pl-cancel").addEventListener("click", close);
   backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
   backdrop.addEventListener("keydown", (e) => {
     e.stopPropagation();
-    if (e.key === "Enter") add();
+    if (e.key === "Enter") save();
     if (e.key === "Escape") close();
   });
 }
@@ -3307,11 +3343,13 @@ function bindItemSection(kind, items, projectId) {
       updateCount();
     });
     li.querySelector("[data-delete]").addEventListener("click", () => {
-      const idx = items.findIndex((i) => i.id === item.id);
-      items.splice(idx, 1);
-      persist();
-      li.remove(); // in place, no flash
-      updateCount();
+      showConfirm({ title: kind === "goals" ? "Delete goal?" : "Delete task?", message: `Delete "${item.text}"?` }, () => {
+        const idx = items.findIndex((i) => i.id === item.id);
+        items.splice(idx, 1);
+        persist();
+        li.remove(); // in place, no flash
+        updateCount();
+      });
     });
     li.querySelector("[data-edit]").addEventListener("click", () => startEdit(li, item));
     li.querySelectorAll("[data-notebtn]").forEach((b) =>

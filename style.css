@@ -1774,7 +1774,7 @@ a.crow:hover .crow-name { color: #fff; }
   color: var(--text-3);
 }
 
-.crow-remove {
+.crow-remove, .crow-edit {
   flex-shrink: 0;
   color: var(--text-3);
   font-size: 16px;
@@ -1783,14 +1783,15 @@ a.crow:hover .crow-name { color: #fff; }
   opacity: 0;
   transition: opacity 0.15s, color 0.15s;
 }
-.crow:hover .crow-remove { opacity: 1; }
-.crow-remove:hover { color: var(--text); }
+.crow:hover .crow-remove, .crow:hover .crow-edit { opacity: 1; }
+.crow-remove:hover, .crow-edit:hover { color: var(--text); }
+.crow-edit svg { width: 14px; height: 14px; display: block; }
 
 /* instant tooltip so it reads as "goes back to desktop", not "deleted" */
-.crow-remove {
+.crow-remove, .crow-edit {
   position: relative;
 }
-.crow-remove::after {
+.crow-remove::after, .crow-edit::after {
   content: attr(data-tip);
   position: absolute;
   right: 0;
@@ -1808,7 +1809,11 @@ a.crow:hover .crow-name { color: #fff; }
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   z-index: 2;
 }
-.crow-remove:hover::after { opacity: 1; }
+.crow-remove:hover::after, .crow-edit:hover::after { opacity: 1; }
+
+/* confirmation dialog: a touch narrower than the form modals */
+.confirm-dialog { max-width: 380px; }
+.confirm-dialog .form-note { margin-bottom: 4px; }
 
 .crow-add {
   justify-content: center;
@@ -2956,39 +2961,22 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .mf-icon-empty svg, .mf-icon-folder svg { width: 21px; height: 21px; }
 
 .mf-body { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.3; gap: 1px; }
-.mf-title {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-2);
-}
 .mf-iconlink { flex-shrink: 0; display: flex; text-decoration: none; }
 
-/* the editable name — reads as a bold label, becomes a field on click */
-.mf-name {
-  width: 100%;
-  min-width: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  outline: none;
-  color: var(--text);
-  font: inherit;
+/* main label "Master folder" on top, domain underneath */
+.mf-maintitle {
   font-size: 14.5px;
   font-weight: 600;
   letter-spacing: -0.011em;
-  padding: 2px 6px;
-  margin-left: -6px;
-  text-overflow: ellipsis;
-  cursor: text;
-  transition: background 0.15s, border-color 0.15s;
+  color: var(--text);
 }
-.mf-name:hover { background: rgba(255, 255, 255, 0.05); }
-.mf-name:focus {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: var(--line-strong);
-  text-overflow: clip;
+.mf-sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mf-open {
