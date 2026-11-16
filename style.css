@@ -2264,7 +2264,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 }
 .item-meta:empty { display: none; }
 .meta-chip { color: var(--text-3); }
-.item-meta > span + span::before { content: "·"; margin: 0 6px; color: var(--text-3); }
 .meta-sep { opacity: 0.5; }
 
 /* indicators attached to the text: part of the task, not floating */
@@ -3039,22 +3038,39 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 
 .archive-count[hidden] { display: none; }
 
-/* due dates & owners on task rows: coloured text only where it matters */
-.meta-due { color: var(--text-2); font-weight: 500; }
-.meta-due.due-soon, .meta-due.due-today { color: #fbbf24; }
-.meta-due.due-over { color: #f87171; }
-.item.done .meta-due { color: var(--text-3); font-weight: 400; }
-
-.owner-chip {
-  flex-shrink: 0;
+/* one chip family for task rows: created stamp, due date, owner.
+   Same height, radius, border and type, so they read as one system. */
+.meta-chip, .due-chip, .owner-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: var(--text-2);
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
   white-space: nowrap;
+  flex-shrink: 0;
 }
+.due-chip { color: var(--text-2); }
+.due-chip.due-soon { color: #fbbf24; border-color: rgba(251, 191, 36, 0.35); }
+.due-chip.due-today { color: #fbbf24; background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.4); }
+.due-chip.due-over { color: #f87171; background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.4); }
+.item.done .due-chip { opacity: 0.5; }
+.owner-chip { color: var(--text-2); background: rgba(255, 255, 255, 0.04); }
 .owner-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--pc); }
+
+/* rows: everything hangs off the first line of text, not the row's middle */
+.item { align-items: flex-start; }
+.item-check { margin-top: 1.5px; }               /* 19px box centred on the 22px first line */
+.goal-line .item-check { margin-top: 1px; }       /* 20px */
+.subtasks .item-check { margin-top: 2.5px; }      /* 17px */
+.item-text { min-height: 22px; line-height: 22px; }
+.item-badges { align-items: center; min-height: 22px; }
+.item-actions { align-self: flex-start; min-height: 22px; display: flex; align-items: center; }
+.item-meta { margin-top: 4px; }
 
 /* task editor: Under / Owner / Due on one wrapping row */
 .editor-goal { flex-wrap: wrap; row-gap: 6px; }
@@ -3086,7 +3102,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .today-due .today-group-head { color: #fbbf24; }
 .today-person { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--pc); margin-right: 7px; }
 .today-row { align-items: flex-start; }
-.today-row .item-check { margin-top: 1px; width: 17px; height: 17px; border-radius: 6px; }
+.today-row .item-check { width: 17px; height: 17px; border-radius: 6px; margin-top: 2.5px; }
 .today-row .item-main { flex: 1 1 auto; }
 .today-row .item-text { font-size: 13.5px; }
 .today-ctx { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 3px; min-width: 0; }
@@ -3095,7 +3111,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   font-size: 11px; color: var(--text-3); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
 }
-.today-row .item-badges { margin-top: 1px; }
 .today-empty { padding: 6px 0 2px; line-height: 1.5; }
 .today-date { font-size: 12px; color: var(--text-3); }
 

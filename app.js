@@ -786,20 +786,10 @@ function smartDT(iso) {
 }
 
 /* meta line under a task/goal: created time + closed time */
-/* "13 Nov" this year, "13 Nov 2025" otherwise */
-function shortDate(iso) {
-  const d = new Date(iso);
-  if (isNaN(d)) return "";
-  const opts = { day: "numeric", month: "short" };
-  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
-  return d.toLocaleDateString("en-GB", opts);
-}
-
 function itemMetaHtml(item) {
   const bits = [];
-  if (item.due) bits.push(dueChipHtml(item));
-  if (item.done && item.closedAt) bits.push(`<span class="meta-chip meta-closed">Done ${shortDate(item.closedAt)}</span>`);
-  else if (item.createdAt) bits.push(`<span class="meta-chip">Added ${shortDate(item.createdAt)}</span>`);
+  if (item.createdAt) bits.push(`<span class="meta-chip" title="Created">＋ ${fmtDT(item.createdAt)}</span>`);
+  if (item.done && item.closedAt) bits.push(`<span class="meta-chip meta-closed" title="Completed">✓ ${fmtDT(item.closedAt)}</span>`);
   return bits.join("");
 }
 
@@ -1128,14 +1118,14 @@ function dueChipHtml(item) {
   const n = dueDelta(item.due);
   const cls = item.done ? "" : n < 0 ? "due-over" : n === 0 ? "due-today" : n <= 2 ? "due-soon" : "";
   const label = !item.done && n < 0 ? `Overdue · ${dueLabel(item.due)}` : dueLabel(item.due);
-  return `<span class="meta-due ${cls}">${!item.done && n < 0 ? label : "Due " + label}</span>`;
+  return `<span class="due-chip ${cls}">${label}</span>`;
 }
 
 /* owner chip: only for tasks someone else owns */
 function ownerChipHtml(item) {
   if (isMine(item)) return "";
   const per = personById(item.owner);
-  return `<span class="owner-chip" style="--pc:${per.color}" title="Owner: ${escapeHtml(per.name)}">${escapeHtml(per.name.split(" ")[0])}</span>`;
+  return `<span class="owner-chip" style="--pc:${per.color}" >${escapeHtml(per.name.split(" ")[0])}</span>`;
 }
 
 /* every task (in non-archived projects) connected to this person */
@@ -3499,7 +3489,7 @@ function itemRowHtml(item, kind = "tasks") {
           <span class="item-meta">${itemMetaHtml(item)}</span>
         </span>
         <span class="item-badges">
-          ${ownerChipHtml(item)}
+          ${dueChipHtml(item)}${ownerChipHtml(item)}
           ${item.note ? `<button class="badge badge-note" data-notebtn title="Open doc">${NOTE_SVG}</button>` : ""}
           ${item.link ? `<a class="badge badge-link" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" title="${escapeHtml(item.link)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>` : ""}
           ${personChipsHtml(item)}
@@ -3929,12 +3919,11 @@ function todayRowHtml({ task, space, goal }) {
       <span class="item-main">
         <span class="item-text">${task.tag ? `<span class="item-tag" style="--wt:${WIDGETS[task.tag].tint}">${WIDGETS[task.tag].icon}</span>` : ""}${escapeHtml(task.text)}</span>
         <span class="today-ctx">
-          ${dueChipHtml(task)}
           <button class="project-chip" data-tgoto="${space.ref}" title="Open space">${escapeHtml(space.label)}</button>
           ${goal ? `<span class="today-goal" title="Goal">${escapeHtml(goal.text)}</span>` : ""}
         </span>
       </span>
-      <span class="item-badges">${ownerChipHtml(task)}</span>
+      <span class="item-badges">${dueChipHtml(task)}${ownerChipHtml(task)}</span>
     </li>`;
 }
 
