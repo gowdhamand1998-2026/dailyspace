@@ -2159,25 +2159,37 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .panel-notes { display: flex; flex-direction: column; }
 .panel-notes .notes-area { flex: 1; }
 
-/* goals run left to right as pills */
-.panel-goals .item-list {
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 8px;
+/* goals are the main lines; each goal's tasks sit beneath it as subtasks */
+.goal-list { display: flex; flex-direction: column; gap: 16px; }
+.goal-line .item-text { font-size: 15px; font-weight: 600; color: var(--text); }
+.goal-line .item-check { width: 20px; height: 20px; border-radius: 50%; }
+.goal-block.done > .goal-line .item-text { color: var(--text-3); }
+.subtasks {
+  margin-left: 9px;
+  padding-left: 19px;
+  border-left: 1.5px solid var(--line);
 }
-.panel-goals .item {
-  width: auto;
-  margin: 0;
-  padding: 7px 12px;
-  gap: 9px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.05);
+.goal-block.done > .subtasks { opacity: 0.6; }
+.subtasks .item-text { font-size: 13.5px; }
+.subtasks .item-check { width: 17px; height: 17px; border-radius: 6px; }
+.sub-count { display: block; font-size: 11px; margin: -2px 0 2px; }
+.sub-count:empty { display: none; }
+
+/* subtask add row stays quiet until you start typing in it */
+.subtasks .add-row { margin-top: 2px; }
+.subtasks .add-row input { background: transparent; border-color: transparent; padding: 6px 9px; font-size: 13px; }
+.subtasks .add-row input:focus { background: rgba(255, 255, 255, 0.06); border-color: var(--line); box-shadow: none; }
+.subtasks .add-row .tag-btn, .subtasks .add-row .btn { display: none; }
+.subtasks .add-row:focus-within .tag-btn, .subtasks .add-row:focus-within .btn { display: flex; }
+
+/* task editor: which goal the task sits under */
+.editor-goal { margin-top: 2px; }
+.editor-goal-label { font-size: 12px; color: var(--text-3); flex-shrink: 0; }
+.editor-goal select {
+  flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 6px 10px;
+  color: var(--text); background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line); border-radius: 11px; outline: none;
 }
-.panel-goals .item:hover { background: rgba(255, 255, 255, 0.09); border-color: var(--line-strong); }
-.panel-goals .item-text { flex: none; font-size: 13.5px; }
-.panel-goals .item-check { width: 17px; height: 17px; border-radius: 50%; }
-.panel-goals .item-delete { padding: 0 2px; }
 
 .panel {
   background: rgba(255, 255, 255, 0.045);
@@ -2252,7 +2264,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .item-meta:empty { display: none; }
 .meta-chip { border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
 .meta-sep { opacity: 0.5; }
-.panel-goals .item-main .item-text { font-size: 13.5px; }
 
 /* indicators attached to the text: part of the task, not floating */
 .item-badges { display: inline-flex; gap: 5px; flex-shrink: 0; }

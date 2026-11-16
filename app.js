@@ -296,6 +296,7 @@ let importsAppliedNow = false; // true when this load added something → push t
 
 const IMPORTS = [
   { key: "meeting-2026-11-13", at: new Date(2026, 10, 13, 12, 0, 0).toISOString(), build: import20261113 },
+  { key: "meeting-2026-11-13-goals", at: new Date(2026, 10, 13, 12, 0, 0).toISOString(), build: link20261113 },
 ];
 
 function applyImports(s) {
@@ -362,10 +363,48 @@ function applyImports(s) {
       return c;
     };
 
-    imp.build({ project, company, fill });
+    /* file existing tasks under an existing goal (never creates anything,
+       never moves a task that already sits under a goal) */
+    const link = (projectName, goalText, taskTexts) => {
+      const p = s.projects.find((x) => same(x.name, projectName));
+      const g = p && p.goals.find((x) => same(x.text, goalText));
+      if (!g) return;
+      p.tasks.forEach((t) => {
+        if (!t.goalId && taskTexts.some((txt) => same(t.text, txt))) t.goalId = g.id;
+      });
+    };
+
+    imp.build({ project, company, fill, link });
     s.imports[imp.key] = new Date().toISOString();
     importsAppliedNow = true;
   });
+}
+
+/* goals → subtasks: put the 13 Nov tasks under the goals they serve */
+function link20261113({ link }) {
+  link("Family Office", "Agree the offering terms with Arya Bank", [
+    "D to post the Arya Bank terms email in the group with Rami",
+    "N to speak to Hadi about the licensing structure",
+  ]);
+  link("Family Office", "Get the FO Agreement and the full deal data from Rami", [
+    "D to nudge Rami for the FO Agreement draft + consolidated data, holdings, pricing and transaction structure",
+  ]);
+  link("Gold", "Start the supply-side conversation with Michael", [
+    "Convert Rami's document to PDF and send it to N",
+    "N to read Rami's document",
+    "N to contact Michael, then create a WhatsApp group with Michael and D",
+  ]);
+  link("Gold", "Finalize the gold proposal and set the next steps", [
+    "Share the updated gold proposal with Michael",
+    "Validate and finalize the proposal, then identify the next steps",
+  ]);
+  link("Project 23", "Move the money and get a debit card on the account", [
+    "N to move the money",
+    "D to contact the bank relationship manager about a debit card",
+  ]);
+  link("Google Migration", "Point the domain to Google Workspace", [
+    "D to pick a 1-hour weekend slot when N can help point the domain",
+  ]);
 }
 
 /* 13 Nov 2026 — D (Durai) & N (Nikhel) catch-up */
@@ -947,12 +986,20 @@ window.addEventListener("DOMContentLoaded", route);
 
 /* ---------- 3. DESKTOP ---------- */
 
+/* widgets start fresh from the 13 Nov 2026 restart: older items stay in
+   their spaces but no longer feed the desktop widgets */
+const WIDGET_SINCE = new Date(2026, 10, 13);
+
 function taggedTasks(tag) {
   const source = WIDGETS[tag].source; // "tasks" or "goals"
   const out = [];
   state.projects.forEach((p) => {
     if (isArchived("project", p.id)) return; // archived projects rest quietly
-    p[source].forEach((t) => { if (t.tag === tag) out.push({ task: t, project: p }); });
+    p[source].forEach((t) => {
+      if (t.tag !== tag) return;
+      if (t.createdAt && new Date(t.createdAt) < WIDGET_SINCE) return;
+      out.push({ task: t, project: p });
+    });
   });
   return out;
 }
@@ -2512,9 +2559,9 @@ function wireCollection(id) {
 
 function widgetWindowHtml(kind) {
   const w = WIDGETS[kind];
-  const entries = taggedTasks(kind);
-  const pending = entries.filter((x) => !x.task.done);
-  const done = entries.filter((x) => x.task.done);
+  // open items only: ticking one here keeps it (struck through) until the
+  // window closes, then it leaves the widget
+  const entries = taggedTasks(kind).filter((x) => !x.task.done);
 
   const row = ({ task, project }) => `
     <li class="item ${task.done ? "done" : ""}" style="--pa:${accentFor(project.id)}">
@@ -2535,8 +2582,7 @@ function widgetWindowHtml(kind) {
         <div class="window-body">
           ${entries.length ? `
             <ul class="item-list">
-              ${pending.map(row).join("")}
-              ${done.map(row).join("")}
+              ${entries.map(row).join("")}
             </ul>` : `<div class="empty-hint">${w.empty}</div>`}
         </div>
       </div>
@@ -2770,11 +2816,7 @@ function projTabBodyHtml(p) {
         </div>
       </div>`;
   }
-  if (projTab === "work") {
-    return `
-      ${sectionHtml("goals", "Goals", p.goals, "Add a goal...")}
-      ${sectionHtml("tasks", "Tasks", p.tasks, "Add a task...")}`;
-  }
+  if (projTab === "work") return workHtml(p);
   if (projTab === "tracker" && p.tracker) {
     return `
       <button class="crow crow-add hub-add" data-tk-fab>+ Add to ${escapeHtml(p.tracker.name)}</button>
@@ -3067,8 +3109,7 @@ function wireTabContent(id, page) {
     });
 
   } else if (projTab === "work") {
-    bindItemSection("goals", p.goals, id);
-    bindItemSection("tasks", p.tasks, id);
+    wireWork(p, id, page);
   } else if (projTab === "tracker" && p.tracker) {
     wireTrackerTab(p, id, page);
   } else if (projTab === "links") {
@@ -3318,9 +3359,9 @@ function showProjectLinkModal(p, id, page, existing) {
 }
 
 /* Builds the HTML for a checkable list panel (goals or tasks) */
-function itemRowHtml(item) {
+function itemRowHtml(item, kind = "tasks") {
   return `
-      <li class="item ${item.done ? "done" : ""}" data-id="${item.id}">
+      <li class="item ${item.done ? "done" : ""}" data-id="${item.id}" data-kind="${kind}">
         <button class="item-check" data-toggle title="Toggle">${CHECK_SVG}</button>
         <span class="item-main">
           <span class="item-text" data-edit title="Click to edit">
@@ -3345,63 +3386,119 @@ function elFromHtml(html) {
   return t.content.firstElementChild;
 }
 
-function sectionHtml(kind, label, items, placeholder) {
-  const doneCount = items.filter((i) => i.done).length;
-  const rows = items.map(itemRowHtml).join("");
+/* "1 / 3" style progress, blank when the list is empty */
+function progressText(list) {
+  return list.length ? `${list.filter((i) => i.done).length} / ${list.length}` : "";
+}
 
+function addRowHtml(placeholder, withTags) {
   // all four tags live on tasks; goals have none
-  const tagButtons = kind === "tasks"
+  const tagButtons = withTags
     ? Object.keys(WIDGETS)
         .map((t) => `<button class="tag-btn" data-tag-btn="${t}" style="--wt:${WIDGETS[t].tint}" title="Tag as ${WIDGETS[t].label.toLowerCase()}">${WIDGETS[t].icon}</button>`)
         .join("")
     : "";
-
   return `
-    <div class="panel panel-${kind}" data-section="${kind}">
-      <div class="section-title">${label}
-        <span class="section-count">${items.length ? `${doneCount} / ${items.length}` : ""}</span>
-      </div>
-      <ul class="item-list">${rows}</ul>
-      ${items.length ? "" : `<div class="empty-hint">No ${kind} yet.</div>`}
       <div class="add-row">
         <input type="text" data-add-input placeholder="${placeholder}" maxlength="200" />
         ${tagButtons}
         <button class="btn btn-ghost" data-add-btn>Add</button>
-      </div>
-    </div>
-  `;
+      </div>`;
 }
 
-/* Wires up add / toggle / delete inside one panel */
-function bindItemSection(kind, items, projectId) {
-  const section = app.querySelector(`[data-section="${kind}"]`);
-  const input = section.querySelector("[data-add-input]");
+/* tasks whose goal no longer exists count as loose ("Others") */
+function looseTasks(p) {
+  const goalIds = new Set(p.goals.map((g) => g.id));
+  return p.tasks.filter((t) => !t.goalId || !goalIds.has(t.goalId));
+}
+
+/* Goals & Tasks tab: each goal is a main line with its subtasks indented
+   beneath it; tasks that belong to no goal collect under "Others" */
+function workHtml(p) {
+  const loose = looseTasks(p);
+  const goalBlock = (g) => {
+    const subs = p.tasks.filter((t) => t.goalId === g.id);
+    return `
+      <div class="goal-block ${g.done ? "done" : ""}" data-goal-block="${g.id}">
+        <ul class="item-list goal-line">${itemRowHtml(g, "goals")}</ul>
+        <div class="subtasks" data-section="tasks" data-goal="${g.id}">
+          <span class="sub-count section-count">${progressText(subs)}</span>
+          <ul class="item-list">${subs.map((t) => itemRowHtml(t, "tasks")).join("")}</ul>
+          ${addRowHtml("Add a subtask...", true)}
+        </div>
+      </div>`;
+  };
+  return `
+    <div class="panel panel-goals" data-section="goals">
+      <div class="section-title">Goals
+        <span class="section-count">${progressText(p.goals)}</span>
+      </div>
+      <div class="goal-list">${p.goals.map(goalBlock).join("")}</div>
+      ${p.goals.length ? "" : `<div class="empty-hint">No goals yet. Add one, then put its tasks underneath it.</div>`}
+      ${addRowHtml("Add a goal...", false)}
+    </div>
+    <div class="panel panel-tasks" data-section="tasks" data-goal="">
+      <div class="section-title">Others
+        <span class="section-count">${progressText(loose)}</span>
+      </div>
+      <ul class="item-list">${loose.map((t) => itemRowHtml(t, "tasks")).join("")}</ul>
+      ${loose.length ? "" : `<div class="empty-hint">Tasks that don't belong to a goal land here.</div>`}
+      ${addRowHtml("Add a task...", true)}
+    </div>`;
+}
+
+function wireWork(p, id, page) {
+  // redraw just the tab body (goal added/removed, task moved between goals)
+  const rerender = () => {
+    const inner = page.querySelector(".projectpage-inner");
+    inner.innerHTML = projTabBodyHtml(p);
+    wireTabContent(id, page);
+  };
+  page.querySelectorAll("[data-section]").forEach((section) => {
+    if (section.dataset.section === "goals") {
+      bindItemSection("goals", p.goals, id, { section, project: p, rerender });
+    } else {
+      const gid = section.dataset.goal || null;
+      const goalIds = new Set(p.goals.map((g) => g.id));
+      bindItemSection("tasks", p.tasks, id, {
+        section, project: p, rerender, goalId: gid,
+        filter: gid ? (t) => t.goalId === gid : (t) => !t.goalId || !goalIds.has(t.goalId),
+      });
+    }
+  });
+}
+
+/* Wires up add / toggle / delete inside one list. A section can hold nested
+   sections (goal blocks hold their subtasks), so every lookup is limited to
+   the elements that belong to THIS section. */
+function bindItemSection(kind, items, projectId, opts) {
+  const { section, project, rerender, goalId = null, filter = null } = opts;
+  const own = (sel) => [...section.querySelectorAll(sel)].filter((el) => el.closest("[data-section]") === section);
+  const input = own("[data-add-input]")[0];
   let selectedTag = null;
 
   // tag picker (tasks only): click to select, click again to unselect
-  section.querySelectorAll("[data-tag-btn]").forEach((btn) => {
+  own("[data-tag-btn]").forEach((btn) => {
     btn.addEventListener("click", () => {
       selectedTag = selectedTag === btn.dataset.tagBtn ? null : btn.dataset.tagBtn;
-      section.querySelectorAll("[data-tag-btn]").forEach((b) =>
+      own("[data-tag-btn]").forEach((b) =>
         b.classList.toggle("active", b.dataset.tagBtn === selectedTag)
       );
       input.focus();
     });
   });
 
-  const list = section.querySelector(".item-list");
+  const list = own(".item-list").pop();
+  const visible = () => (filter ? items.filter(filter) : items);
 
   function updateCount() {
-    const count = section.querySelector(".section-count");
-    if (count) {
-      const doneCount = items.filter((i) => i.done).length;
-      count.textContent = items.length ? `${doneCount} / ${items.length}` : "";
-    }
+    const count = own(".section-count")[0];
+    if (count) count.textContent = progressText(visible());
   }
 
   /* swap one row for a fresh render of itself — no page flash */
   function refreshRow(li, item) {
-    const fresh = elFromHtml(itemRowHtml(item));
+    const fresh = elFromHtml(itemRowHtml(item, kind));
     li.replaceWith(fresh);
     wireItem(fresh, item);
     updateCount();
@@ -3410,22 +3507,34 @@ function bindItemSection(kind, items, projectId) {
   function add() {
     const text = input.value.trim();
     if (!text) return;
-    const item = { id: uid(), text, done: false, tag: selectedTag, createdAt: new Date().toISOString() };
+    const item = {
+      id: uid(), text, done: false, tag: selectedTag, createdAt: new Date().toISOString(),
+      ...(goalId ? { goalId } : {}),
+    };
     items.push(item);
     persist();
 
+    // a new goal brings its own subtask list → redraw the tab, keep typing
+    if (kind === "goals") {
+      rerender();
+      const fresh = page().querySelector('[data-section="goals"] .add-row [data-add-input]');
+      if (fresh) fresh.focus();
+      return;
+    }
+
     // insert in place — no re-render, no flash
-    const li = elFromHtml(itemRowHtml(item));
+    const li = elFromHtml(itemRowHtml(item, kind));
     list.appendChild(li);
     wireItem(li, item);
     updateCount();
-    const hint = section.querySelector(".empty-hint");
+    const hint = own(".empty-hint")[0];
     if (hint) hint.remove();
     input.value = "";
     input.focus();
   }
+  const page = () => app.querySelector(".projectpage");
 
-  section.querySelector("[data-add-btn]").addEventListener("click", add);
+  own("[data-add-btn]")[0].addEventListener("click", add);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
 
   /* full inline editor: text, tag (switchable), link — all in one place */
@@ -3448,6 +3557,14 @@ function bindItemSection(kind, items, projectId) {
           <input class="edit-input edit-link" id="ed-link" value="${escapeHtml(item.link || "")}"
             placeholder="Link (optional)" maxlength="300" />
         </div>
+        ${kind === "tasks" && project.goals.length ? `
+        <label class="editor-row editor-goal">
+          <span class="editor-goal-label">Under</span>
+          <select class="edit-input" id="ed-goal">
+            <option value="">Others (no goal)</option>
+            ${project.goals.map((g) => `<option value="${g.id}" ${item.goalId === g.id ? "selected" : ""}>${escapeHtml(g.text)}</option>`).join("")}
+          </select>
+        </label>` : ""}
         <div class="editor-actions">
           ${kind === "tasks" ? `
           <button class="btn btn-ghost btn-sm editor-note-btn" data-ed-addppl>${ICONS.users} <span id="ed-ppl-label">Add people</span></button>
@@ -3507,11 +3624,18 @@ function bindItemSection(kind, items, projectId) {
       else item.link = /^https?:\/\//i.test(url) ? url : "https://" + url;
       if (editPeople.size) item.people = [...editPeople];
       else delete item.people;
+      const goalSel = li.querySelector("#ed-goal");
+      if (goalSel) {
+        if (goalSel.value) item.goalId = goalSel.value;
+        else delete item.goalId;
+      }
       persist();
     }
 
     function save() {
+      const before = item.goalId || "";
       applyEdits();
+      if ((item.goalId || "") !== before) { rerender(); return; } // moved to another goal
       refreshRow(li, item); // only this row updates
     }
 
@@ -3533,14 +3657,26 @@ function bindItemSection(kind, items, projectId) {
       setDone(item, !item.done);
       persist();
       li.classList.toggle("done", item.done);
+      const block = kind === "goals" && li.closest(".goal-block");
+      if (block) block.classList.toggle("done", item.done);
       const metaEl = li.querySelector(".item-meta");
       if (metaEl) metaEl.innerHTML = itemMetaHtml(item);
       updateCount();
     });
     li.querySelector("[data-delete]").addEventListener("click", () => {
-      showConfirm({ title: kind === "goals" ? "Delete goal?" : "Delete task?", message: `Delete "${item.text}"?` }, () => {
+      const subs = kind === "goals" ? project.tasks.filter((t) => t.goalId === item.id) : [];
+      const message = subs.length
+        ? `Delete "${item.text}"? Its ${subs.length} subtask${subs.length > 1 ? "s" : ""} will move to Others.`
+        : `Delete "${item.text}"?`;
+      showConfirm({ title: kind === "goals" ? "Delete goal?" : "Delete task?", message }, () => {
         const idx = items.findIndex((i) => i.id === item.id);
         items.splice(idx, 1);
+        if (kind === "goals") {
+          subs.forEach((t) => delete t.goalId);
+          persist();
+          rerender();
+          return;
+        }
         persist();
         li.remove(); // in place, no flash
         updateCount();
@@ -3560,9 +3696,9 @@ function bindItemSection(kind, items, projectId) {
     );
   }
 
-  section.querySelectorAll(".item").forEach((li) => {
+  own(".item").forEach((li) => {
     const item = items.find((i) => i.id === li.dataset.id);
-    wireItem(li, item);
+    if (item) wireItem(li, item);
   });
 }
 
