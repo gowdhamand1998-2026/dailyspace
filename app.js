@@ -297,6 +297,7 @@ let importsAppliedNow = false; // true when this load added something → push t
 const IMPORTS = [
   { key: "meeting-2026-11-13", at: new Date(2026, 10, 13, 12, 0, 0).toISOString(), build: import20261113 },
   { key: "meeting-2026-11-13-goals", at: new Date(2026, 10, 13, 12, 0, 0).toISOString(), build: link20261113 },
+  { key: "owners-due-2026-11-16", at: new Date(2026, 10, 16, 9, 0, 0).toISOString(), build: ownersAndDue20261116 },
 ];
 
 function applyImports(s) {
@@ -374,9 +375,55 @@ function applyImports(s) {
       });
     };
 
-    imp.build({ project, company, fill, link });
+    /* a person by name, created when missing */
+    const person = (name) => {
+      let per = s.people.find((x) => same(x.name, name));
+      if (!per) {
+        // (imports run at startup, before PEOPLE_COLORS is defined further down)
+        const colors = ["#4ade80", "#60a5fa", "#fbbf24", "#c084fc", "#f87171", "#2dd4bf", "#fb923c", "#a3e635"];
+        per = { id: uid(), name, desc: "", color: colors[s.people.length % colors.length] };
+        s.people.push(per);
+      }
+      return per;
+    };
+
+    /* every task in every space, trackers included */
+    const eachTask = (fn) => {
+      const visit = (node) => {
+        (node.tasks || []).forEach(fn);
+        if (node.tracker) node.tracker.items.forEach(visit);
+      };
+      s.projects.forEach(visit);
+    };
+
+    imp.build({ project, company, fill, link, person, eachTask, same });
     s.imports[imp.key] = new Date().toISOString();
     importsAppliedNow = true;
+  });
+}
+
+/* owners from the "N to …" convention, and the deadlines the 13 Nov notes
+   spelled out ("today" = Fri 13 Nov, "before Monday" = Mon 16 Nov) */
+function ownersAndDue20261116({ person, eachTask, same }) {
+  const nikhel = person("Nikhel");
+  const vishal = person("Vishal");
+  const due = {
+    "N to speak to Hadi about the licensing structure": "2026-11-13",
+    "N to move the money": "2026-11-13",
+    "D to contact the bank relationship manager about a debit card": "2026-11-13",
+    "Share the updated gold proposal with Michael": "2026-11-13",
+    "D to pick a 1-hour weekend slot when N can help point the domain": "2026-11-15",
+    "Work with Vishal on Peter's suggested query fixes (before Monday)": "2026-11-16",
+  };
+  eachTask((t) => {
+    if (!t.owner) {
+      if (/^N\s+to\b/i.test(t.text)) t.owner = nikhel.id;
+      else if (same(t.text, "Vishal to document the Hyperliquid work and outcomes")) t.owner = vishal.id;
+    }
+    if (!t.due) {
+      const k = Object.keys(due).find((txt) => same(t.text, txt));
+      if (k) t.due = due[k];
+    }
   });
 }
 
@@ -830,6 +877,7 @@ const CHECK_SVG =
   '<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6.5L4.5 9L10 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 const ICONS = {
+  today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 007.07 0l2.83-2.83a5 5 0 00-7.07-7.07L11 5.93"/><path d="M14 10a5 5 0 00-7.07 0l-2.83 2.83a5 5 0 007.07 7.07L13 18.07"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -950,9 +998,22 @@ setInterval(() => {
 
 const app = document.getElementById("app");
 
+let mobileHomeShown = false;
+
 function route() {
   // locked until the password is entered
   if (db && !cloud.user) { renderGate(); return; }
+
+  // phones open on Today the first time in; the ← button leads to the desktop
+  if (!mobileHomeShown) {
+    mobileHomeShown = true;
+    const h = window.location.hash;
+    if (IS_MOBILE && (!h || h === "#" || h === "#/")) {
+      history.replaceState(null, "", "#/today");
+    }
+  }
+
+  if (window.location.hash === "#/today") { renderTodayPage(); return; }
 
   const wMatch = window.location.hash.match(/^#\/w\/(call|read|think|sign)$/);
   if (wMatch) { renderDesktop(null, wMatch[1]); return; }
@@ -1015,6 +1076,56 @@ const PEOPLE_COLORS = ["#4ade80", "#60a5fa", "#fbbf24", "#c084fc", "#f87171", "#
 
 function personById(id) {
   return state.people.find((p) => p.id === id);
+}
+
+/* ---------- owners & due dates ----------
+   task.owner: unset = me, otherwise a person id.
+   task.due:   "YYYY-MM-DD" (local date), optional. */
+
+function isMine(t) {
+  return !t.owner || t.owner === "me" || !personById(t.owner);
+}
+
+function dateKey(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function keyToDate(k) {
+  const [y, m, d] = k.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/* days from today to the due date: 0 = today, -1 = yesterday, 1 = tomorrow */
+function dueDelta(k) {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  return Math.round((keyToDate(k) - t) / 86400000);
+}
+
+function dueLabel(k) {
+  const n = dueDelta(k);
+  const d = keyToDate(k);
+  const short = d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  if (n === 0) return "Today";
+  if (n === 1) return "Tomorrow";
+  if (n === -1) return "Yesterday";
+  if (n > 1 && n < 7) return d.toLocaleDateString("en-GB", { weekday: "short" });
+  return short;
+}
+
+function dueChipHtml(item) {
+  if (!item.due) return "";
+  const n = dueDelta(item.due);
+  const cls = item.done ? "" : n < 0 ? "due-over" : n === 0 ? "due-today" : n <= 2 ? "due-soon" : "";
+  const label = !item.done && n < 0 ? `Overdue · ${dueLabel(item.due)}` : dueLabel(item.due);
+  return `<span class="due-chip ${cls}" title="Due ${keyToDate(item.due).toDateString()}">${label}</span>`;
+}
+
+/* owner chip: only for tasks someone else owns */
+function ownerChipHtml(item) {
+  if (isMine(item)) return "";
+  const per = personById(item.owner);
+  return `<span class="owner-chip" style="--pc:${per.color}" title="Owner: ${escapeHtml(per.name)}">${escapeHtml(per.name.split(" ")[0])}</span>`;
 }
 
 /* every task (in non-archived projects) connected to this person */
@@ -1229,8 +1340,14 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
 
       ${state.projects.length ? "" : `<div class="desktop-hint">Your desktop is empty — press + in the dock to create a project</div>`}
 
+      ${IS_MOBILE ? "" : todayPanelHtml()}
+
       <div class="dock">
         <button class="dock-btn" data-tip="Add" data-dock-add>${ICONS.plus}</button>
+        <div class="dock-sep"></div>
+        <button class="dock-btn" data-tip="Today" data-dock-today>${ICONS.today}
+          ${(() => { const n = todayUrgentCount(); return `<span class="archive-count" data-today-badge ${n ? "" : "hidden"}>${n}</span>`; })()}
+        </button>
         <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="Tidy icons" data-dock-tidy>${ICONS.broom}</button>
         <div class="dock-sep"></div>
@@ -1335,6 +1452,8 @@ function wireDesktop() {
   // dock
   app.querySelector("[data-dock-add]").addEventListener("click", showAddChooser);
   app.querySelector("[data-dock-review]").addEventListener("click", () => (window.location.hash = "#/review"));
+  app.querySelector("[data-dock-today]").addEventListener("click", () => (window.location.hash = "#/today"));
+  wireTodayPanel();
   app.querySelector("[data-dock-tidy]").addEventListener("click", () => {
     if (IS_MOBILE) {
       // phones have their own layout — tidy only touches the mobile grid
@@ -3370,6 +3489,7 @@ function itemRowHtml(item, kind = "tasks") {
           <span class="item-meta">${itemMetaHtml(item)}</span>
         </span>
         <span class="item-badges">
+          ${dueChipHtml(item)}${ownerChipHtml(item)}
           ${item.note ? `<button class="badge badge-note" data-notebtn title="Open doc">${NOTE_SVG}</button>` : ""}
           ${item.link ? `<a class="badge badge-link" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" title="${escapeHtml(item.link)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>` : ""}
           ${personChipsHtml(item)}
@@ -3557,14 +3677,29 @@ function bindItemSection(kind, items, projectId, opts) {
           <input class="edit-input edit-link" id="ed-link" value="${escapeHtml(item.link || "")}"
             placeholder="Link (optional)" maxlength="300" />
         </div>
-        ${kind === "tasks" && project.goals.length ? `
-        <label class="editor-row editor-goal">
-          <span class="editor-goal-label">Under</span>
-          <select class="edit-input" id="ed-goal">
-            <option value="">Others (no goal)</option>
-            ${project.goals.map((g) => `<option value="${g.id}" ${item.goalId === g.id ? "selected" : ""}>${escapeHtml(g.text)}</option>`).join("")}
-          </select>
-        </label>` : ""}
+        ${kind === "tasks" ? `
+        <div class="editor-row editor-goal">
+          ${project.goals.length ? `
+          <label class="editor-field editor-field-wide">
+            <span class="editor-goal-label">Under</span>
+            <select id="ed-goal">
+              <option value="">Others (no goal)</option>
+              ${project.goals.map((g) => `<option value="${g.id}" ${item.goalId === g.id ? "selected" : ""}>${escapeHtml(g.text)}</option>`).join("")}
+            </select>
+          </label>` : ""}
+          <label class="editor-field">
+            <span class="editor-goal-label">Owner</span>
+            <select id="ed-owner">
+              <option value="">Me</option>
+              ${[...state.people].sort((a, b) => a.name.localeCompare(b.name)).map((per) =>
+                `<option value="${per.id}" ${item.owner === per.id ? "selected" : ""}>${escapeHtml(per.name)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="editor-field">
+            <span class="editor-goal-label">Due</span>
+            <input type="date" id="ed-due" value="${item.due || ""}" />
+          </label>
+        </div>` : ""}
         <div class="editor-actions">
           ${kind === "tasks" ? `
           <button class="btn btn-ghost btn-sm editor-note-btn" data-ed-addppl>${ICONS.users} <span id="ed-ppl-label">Add people</span></button>
@@ -3628,6 +3763,16 @@ function bindItemSection(kind, items, projectId, opts) {
       if (goalSel) {
         if (goalSel.value) item.goalId = goalSel.value;
         else delete item.goalId;
+      }
+      const ownerSel = li.querySelector("#ed-owner");
+      if (ownerSel) {
+        if (ownerSel.value) item.owner = ownerSel.value;
+        else delete item.owner;
+      }
+      const dueIn = li.querySelector("#ed-due");
+      if (dueIn) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dueIn.value)) item.due = dueIn.value;
+        else delete item.due;
       }
       persist();
     }
@@ -3700,6 +3845,205 @@ function bindItemSection(kind, items, projectId, opts) {
     const item = items.find((i) => i.id === li.dataset.id);
     if (item) wireItem(li, item);
   });
+}
+
+/* ---------- Today: what needs doing now, across every space ----------
+   Reads every open task in non-archived spaces (including companies inside
+   trackers, at any depth) and sorts it into:
+     mine:    overdue · today · next 7 days · next step under each open goal
+     waiting: open tasks someone else owns, grouped by person */
+
+let todayTab = "mine"; // "mine" | "waiting"
+
+/* every space as { node, ref, label } — top-level projects and tracker companies */
+function allSpaces() {
+  const out = [];
+  const visit = (node, ref, label) => {
+    out.push({ node, ref, label });
+    if (node.tracker) node.tracker.items.forEach((c) => {
+      if (c.stage !== "closed") visit(c, ref + "~" + c.id, label + " › " + c.name);
+    });
+  };
+  state.projects.forEach((p) => { if (!isArchived("project", p.id)) visit(p, p.id, p.name); });
+  return out;
+}
+
+function todayData() {
+  const spaces = allSpaces();
+  const open = [];
+  spaces.forEach((s) => s.node.tasks.forEach((t) => {
+    if (t.done) return;
+    const goal = t.goalId && s.node.goals.find((g) => g.id === t.goalId);
+    open.push({ task: t, space: s, goal: goal || null });
+  }));
+  const byDue = (a, b) => (a.task.due || "9999").localeCompare(b.task.due || "9999");
+  const mine = open.filter((x) => isMine(x.task));
+  const dated = (lo, hi) => mine.filter((x) => x.task.due && dueDelta(x.task.due) >= lo && dueDelta(x.task.due) <= hi).sort(byDue);
+
+  // next step: the first open, undated task of mine under each open goal
+  const nextUp = [];
+  spaces.forEach((s) => s.node.goals.forEach((g) => {
+    if (g.done) return;
+    const t = s.node.tasks.find((x) => !x.done && x.goalId === g.id && isMine(x) && !x.due);
+    if (t) nextUp.push({ task: t, space: s, goal: g });
+  }));
+
+  const waiting = {};
+  open.filter((x) => !isMine(x.task)).sort(byDue).forEach((x) => {
+    (waiting[x.task.owner] = waiting[x.task.owner] || []).push(x);
+  });
+
+  return {
+    overdue: dated(-100000, -1),
+    today: dated(0, 0),
+    soon: dated(1, 7),
+    nextUp,
+    waiting,
+    waitingCount: open.length - mine.length,
+  };
+}
+
+/* the dock badge: things of mine that are overdue or due today */
+function todayUrgentCount() {
+  const d = todayData();
+  return d.overdue.length + d.today.length;
+}
+
+function todayRowHtml({ task, space, goal }) {
+  return `
+    <li class="item today-row ${task.done ? "done" : ""}" data-tref="${space.ref}" data-tid="${task.id}" style="--pa:${accentFor(space.ref.split("~")[0])}">
+      <button class="item-check" data-ttoggle title="Done">${CHECK_SVG}</button>
+      <span class="item-main">
+        <span class="item-text">${task.tag ? `<span class="item-tag" style="--wt:${WIDGETS[task.tag].tint}">${WIDGETS[task.tag].icon}</span>` : ""}${escapeHtml(task.text)}</span>
+        <span class="today-ctx">
+          <button class="project-chip" data-tgoto="${space.ref}" title="Open space">${escapeHtml(space.label)}</button>
+          ${goal ? `<span class="today-goal" title="Goal">${escapeHtml(goal.text)}</span>` : ""}
+        </span>
+      </span>
+      <span class="item-badges">${dueChipHtml(task)}${ownerChipHtml(task)}</span>
+    </li>`;
+}
+
+function todayGroupHtml(title, rows, cls = "") {
+  if (!rows.length) return "";
+  return `
+    <section class="today-group ${cls}">
+      <div class="today-group-head">${title}<span class="section-count">${rows.length}</span></div>
+      <ul class="item-list">${rows.map(todayRowHtml).join("")}</ul>
+    </section>`;
+}
+
+function todayTabsHtml(d) {
+  return `
+    <div class="today-tabs">
+      <button class="proj-tab ${todayTab === "mine" ? "active" : ""}" data-ttab="mine">Today</button>
+      <button class="proj-tab ${todayTab === "waiting" ? "active" : ""}" data-ttab="waiting">Waiting on${d.waitingCount ? ` <i class="today-tabcount">${d.waitingCount}</i>` : ""}</button>
+    </div>`;
+}
+
+function todayBodyHtml(d) {
+  if (todayTab === "waiting") {
+    const people = Object.keys(d.waiting);
+    if (!people.length) return `<div class="empty-hint today-empty">Nothing is waiting on anyone. Set an owner on a task (edit it → Owner) and it shows up here.</div>`;
+    return people.map((pid) => {
+      const per = personById(pid);
+      return todayGroupHtml(`<span class="today-person" style="--pc:${per.color}"></span>${escapeHtml(per.name)}`, d.waiting[pid]);
+    }).join("");
+  }
+  const html =
+    todayGroupHtml("Overdue", d.overdue, "today-over") +
+    todayGroupHtml("Due today", d.today, "today-due") +
+    todayGroupHtml("Next 7 days", d.soon) +
+    todayGroupHtml("Next step on each goal", d.nextUp);
+  return html || `<div class="empty-hint today-empty">You're clear. Add a goal with subtasks, or give a task a due date, and it lands here.</div>`;
+}
+
+/* shared behaviour for the panel and the full page */
+function wireToday(root, redraw) {
+  root.querySelectorAll("[data-ttab]").forEach((b) =>
+    b.addEventListener("click", () => { todayTab = b.dataset.ttab; redraw(); })
+  );
+  root.querySelectorAll("[data-ttoggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const li = btn.closest("[data-tid]");
+      const node = containerByRef(li.dataset.tref);
+      const t = node && node.tasks.find((x) => x.id === li.dataset.tid);
+      if (!t) return;
+      setDone(t, !t.done);
+      persist();
+      li.classList.toggle("done", t.done); // stays (struck through) until the next redraw
+      const badge = app.querySelector("[data-today-badge]");
+      if (badge) { const n = todayUrgentCount(); badge.textContent = n; badge.hidden = !n; }
+    });
+  });
+  root.querySelectorAll("[data-tgoto]").forEach((b) =>
+    b.addEventListener("click", () => {
+      projTabFor = b.dataset.tgoto; // land on Goals & Tasks, not the default tab
+      projTab = "work";
+      window.location.hash = "#/p/" + b.dataset.tgoto;
+    })
+  );
+}
+
+function todayDateLabel() {
+  return new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+}
+
+/* homepage panel (desktop) */
+function todayPanelHtml() {
+  const d = todayData();
+  const collapsed = !!state.todayCollapsed;
+  return `
+    <aside class="today-panel ${collapsed ? "collapsed" : ""} ${state.timebarHidden ? "" : "with-timebar"}" data-today-panel>
+      <div class="today-panel-head">
+        <button class="today-title" data-today-collapse title="${collapsed ? "Show" : "Hide"} Today">
+          ${ICONS.today}<span>Today</span>
+          ${collapsed && (d.overdue.length + d.today.length) ? `<i class="today-tabcount">${d.overdue.length + d.today.length}</i>` : ""}
+        </button>
+        <span class="today-date">${todayDateLabel()}</span>
+        <button class="today-icon-btn" data-today-full title="Open full view">${ICONS.eye}</button>
+      </div>
+      ${collapsed ? "" : `
+        ${todayTabsHtml(d)}
+        <div class="today-scroll">${todayBodyHtml(d)}</div>`}
+    </aside>`;
+}
+
+function wireTodayPanel() {
+  const panel = app.querySelector("[data-today-panel]");
+  if (!panel) return;
+  const redraw = () => {
+    panel.outerHTML = todayPanelHtml();
+    wireTodayPanel();
+  };
+  panel.querySelector("[data-today-collapse]").addEventListener("click", () => {
+    state.todayCollapsed = !state.todayCollapsed;
+    persist();
+    redraw();
+  });
+  panel.querySelector("[data-today-full]").addEventListener("click", () => (window.location.hash = "#/today"));
+  panel.addEventListener("pointerdown", (e) => e.stopPropagation()); // not a desktop click
+  wireToday(panel, redraw);
+}
+
+/* full page: the phone's home screen, and "open full view" on desktop */
+function renderTodayPage() {
+  const d = todayData();
+  app.innerHTML = `
+    <div class="projectpage todaypage">
+      <div class="notepage-bar">
+        <button class="back-btn" data-back title="Desktop">&larr;</button>
+        <span class="rev-title">Today</span>
+        <span class="today-date">${todayDateLabel()}</span>
+      </div>
+      <div class="projectpage-inner today-inner">
+        ${todayTabsHtml(d)}
+        <div class="today-body">${todayBodyHtml(d)}</div>
+      </div>
+    </div>`;
+  const page = app.querySelector(".todaypage");
+  page.querySelector("[data-back]").addEventListener("click", () => (window.location.hash = "#/"));
+  wireToday(page, renderTodayPage);
 }
 
 /* ---------- what's new: one-time feature tour, per device ---------- */
