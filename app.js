@@ -282,7 +282,200 @@ function ensureDefaults(s) {
     }
     s.seedPurged = true;
   }
+  applyImports(s);
   return s;
+}
+
+/* ---------- one-time imports (meeting notes → spaces) ----------
+   Each import runs once per space: its key is recorded in s.imports, which
+   syncs to the cloud, so other devices never re-apply it. Items merge into an
+   existing project / tracker company with the same name instead of
+   duplicating, and a task or goal whose text already exists is skipped. */
+
+let importsAppliedNow = false; // true when this load added something → push to cloud
+
+const IMPORTS = [
+  { key: "meeting-2026-11-13", at: new Date(2026, 10, 13, 12, 0, 0).toISOString(), build: import20261113 },
+];
+
+function applyImports(s) {
+  if (!s.imports) s.imports = {};
+  IMPORTS.forEach((imp) => {
+    if (s.imports[imp.key]) return;
+    const at = imp.at;
+    const item = (text, extra = {}) => ({
+      id: uid(), text, done: false, createdAt: at, ...extra,
+      ...(extra.done ? { closedAt: at } : {}),
+    });
+    const note = (html) => ({ id: uid(), text: html, createdAt: at, updatedAt: at });
+    const organs = () => ({
+      goals: [], tasks: [], notesList: [], links: [], docs: [],
+      masterLink: "", masterName: "",
+    });
+    const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+    const personId = (name) => {
+      const per = s.people.find((x) => same(x.name, name));
+      return per ? [per.id] : undefined;
+    };
+
+    /* merge goals / tasks / notes / focus into a project or tracker company */
+    const fill = (target, spec) => {
+      if (spec.focus && !target.focus) target.focus = spec.focus;
+      if (spec.description && !target.description) target.description = spec.description;
+      (spec.goals || []).forEach(([text, extra]) => {
+        if (!target.goals.some((g) => same(g.text, text))) target.goals.push(item(text, extra));
+      });
+      (spec.tasks || []).forEach(([text, extra = {}]) => {
+        if (target.tasks.some((t) => same(t.text, text))) return;
+        const { person, ...rest } = extra;
+        const people = person && personId(person);
+        target.tasks.push(item(text, { ...rest, ...(people ? { people } : {}) }));
+      });
+      (spec.notes || []).forEach((html) => target.notesList.unshift(note(html)));
+    };
+
+    /* top-level project by name, created when missing */
+    const project = (name) => {
+      let p = s.projects.find((x) => same(x.name, name));
+      if (!p) {
+        // continue the top row of project icons, left to right
+        const taken = s.projects.filter((x) => x.pos && x.pos.y < 15).length;
+        p = {
+          id: uid(), name, description: "", focus: "", notes: "",
+          ...organs(),
+          pos: { x: Math.min(80, 2.5 + taken * 7.5), y: 5 },
+          createdAt: at,
+        };
+        s.projects.push(p);
+      }
+      return p;
+    };
+
+    /* company inside a project's tracker, created when missing */
+    const company = (parent, name, stage) => {
+      if (!parent.tracker) parent.tracker = { name: "Tracker", items: [] };
+      let c = parent.tracker.items.find((x) => same(x.name, name));
+      if (!c) {
+        c = { id: uid(), name, stage, ...organs(), tracker: { name: "Tracker", items: [] } };
+        parent.tracker.items.push(c);
+      }
+      return c;
+    };
+
+    imp.build({ project, company, fill });
+    s.imports[imp.key] = new Date().toISOString();
+    importsAppliedNow = true;
+  });
+}
+
+/* 13 Nov 2026 — D (Durai) & N (Nikhel) catch-up */
+function import20261113({ project, company, fill }) {
+  const src = "<i>From the 13 Nov 2026 catch-up</i>";
+
+  fill(project("Family Office"), {
+    description: "Offload the family office assets through Arya Bank.",
+    focus: "Agree the offering terms with Arya Bank",
+    goals: [
+      ["Agree the offering terms with Arya Bank"],
+      ["Get the FO Agreement and the full deal data from Rami"],
+    ],
+    tasks: [
+      ["D to post the Arya Bank terms email in the group with Rami", {
+        tag: "think",
+        note: `<p><b>To:</b> Pascal at Arya Bank<br><b>Subject:</b> Proposed terms for family office asset offering</p>
+<p>Dear Pascal,</p>
+<p>Following our discussions, we'd like to propose the following terms for the family office asset offering:</p>
+<ul>
+<li><b>Initial period:</b> Six weeks, with the option to discuss an extension based on progress.</li>
+<li><b>Arya Bank priority period:</b> For the first three weeks, Arya Bank would have the exclusive opportunity to offer the assets to its clients.</li>
+<li><b>Additional buyers:</b> If the offering has not closed during those three weeks, we may bring in additional buyers. Any buyers we introduce would be subject to Arya Bank's KYC requirements.</li>
+<li><b>Fees:</b> A flat 10% fee, with no recurring fees: 5% to Arya Bank and 5% to our side.</li>
+</ul>
+<p>Could you also clarify what relationship a buyer of these assets would need to establish with Arya Bank? In particular, would they need to open an account with the bank?</p>
+<p>Please let us know your thoughts on the proposed structure.</p>
+<p>Best,<br>Durai</p>`,
+      }],
+      ["D to nudge Rami for the FO Agreement draft + consolidated data, holdings, pricing and transaction structure", { tag: "call" }],
+      ["N to speak to Hadi about the licensing structure", { tag: "call" }],
+    ],
+    notes: [`<b>Proposed terms for Arya Bank (Pascal)</b><br>${src}
+<ul>
+<li><b>Initial period:</b> 6 weeks, extension open based on progress</li>
+<li><b>Priority period:</b> first 3 weeks exclusive to Arya Bank's clients</li>
+<li><b>Additional buyers:</b> we can bring buyers in after week 3; they go through Arya Bank's KYC</li>
+<li><b>Fees:</b> flat 10%, no recurring fees: 5% Arya Bank, 5% our side</li>
+<li><b>Open question:</b> what relationship does a buyer need with Arya Bank? Do they need to open an account?</li>
+</ul>
+The full email is in the note on the "post the Arya Bank terms email" task.`],
+  });
+
+  fill(project("Gold"), {
+    description: "Gold proposal and the supply side with Michael.",
+    focus: "Finalize the gold proposal with Michael",
+    goals: [
+      ["Start the supply-side conversation with Michael"],
+      ["Finalize the gold proposal and set the next steps"],
+    ],
+    tasks: [
+      ["Convert Rami's document to PDF and send it to N", { done: true }],
+      ["N to read Rami's document", { tag: "read" }],
+      ["N to contact Michael, then create a WhatsApp group with Michael and D", { tag: "call" }],
+      ["Share the updated gold proposal with Michael"],
+      ["Validate and finalize the proposal, then identify the next steps", { tag: "think" }],
+    ],
+    notes: [`<b>Gold: next steps, in order</b><br>${src}
+<ol>
+<li>Convert Rami's document to PDF and send it to Nikhel (sent; Nikhel to read it)</li>
+<li>Nikhel contacts Michael first, then creates a WhatsApp group with Michael and Durai to start the supply-side conversation</li>
+<li>Share the updated gold proposal with Michael</li>
+<li>Validate and finalize the proposal, then identify the next steps</li>
+</ol>`],
+  });
+
+  fill(company(project("Secondaries"), "Neuralink", "progress"), {
+    tasks: [
+      ["N to confirm the valuation"],
+      ["N to get answers to the other questions Rami raised"],
+    ],
+    notes: [`<b>Neuralink follow-up</b><br>${src}<br>Nikhel to confirm the valuation and get answers to the other questions Rami raised.`],
+  });
+
+  fill(project("Project 23"), {
+    goals: [["Move the money and get a debit card on the account"]],
+    tasks: [
+      ["N to move the money"],
+      ["D to contact the bank relationship manager about a debit card", { tag: "call" }],
+    ],
+    notes: [`<b>Project 23</b><br>${src}<br>Nikhel moves the money; Durai contacts the bank relationship manager about a debit card.`],
+  });
+
+  fill(project("Google Migration"), {
+    focus: "Point the domain to Google Workspace",
+    goals: [["Point the domain to Google Workspace"]],
+    tasks: [
+      ["D to pick a 1-hour weekend slot when N can help point the domain"],
+    ],
+    notes: [`<b>Google migration</b><br>${src}<br>Durai picks an hour over the weekend when Nikhel is free to help point the domain to Google Workspace.`],
+  });
+
+  const q4 = project("Q4 Projects");
+  fill(q4, {
+    description: "Every Q4 project in one list.",
+    notes: [`<b>Q4 projects</b><br>${src}<br>Stryde, Claylight, Aya and MotoGP, tracked together in this space's Tracker.`],
+  });
+  ["Stryde", "Claylight", "Aya", "MotoGP"].forEach((n) => company(q4, n, "watch"));
+
+  fill(project("Hampstead"), {
+    tasks: [
+      ["Work with Vishal on Peter's suggested query fixes (before Monday)", { person: "Peter" }],
+      ["Vishal to document the Hyperliquid work and outcomes"],
+    ],
+    notes: [`<b>Hampstead</b><br>${src}<br>Work with Vishal on Peter's suggested query fixes before Monday. Vishal had also been asked to document the Hyperliquid work and outcomes.`],
+  });
+
+  fill(project("Others"), {
+    tasks: [["Book a 1-hour 1:1: D x N", { tag: "call" }]],
+  });
 }
 
 let state = ensureDefaults(Store.load());
@@ -343,10 +536,12 @@ async function loadCloud() {
   const { data: row, error } = await db.from("spaces").select("data").maybeSingle();
   if (error) { cloud.status = "error"; updateSyncChip(); return; }
   if (row && row.data) {
+    importsAppliedNow = false;
     state = ensureDefaults(row.data);
     Store.save(state);
     cloud.status = "synced";
     route();
+    if (importsAppliedNow) await cloudSaveNow(); // new imported items → sync them up
   } else {
     await cloudSaveNow(); // nothing in the cloud yet → upload this device's data
   }

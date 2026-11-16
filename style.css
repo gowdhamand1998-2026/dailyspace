@@ -693,7 +693,7 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   letter-spacing: -0.02em;
   margin: 22px 0 8px;
 }
-.note-editor ul { padding-left: 24px; margin: 8px 0; }
+.note-editor ul, .note-editor ol { padding-left: 24px; margin: 8px 0; }
 .note-editor li { margin: 4px 0; }
 .note-editor p { margin: 8px 0; }
 
@@ -835,7 +835,7 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   color: var(--text-3);
   pointer-events: none;
 }
-.note-card-text ul { padding-left: 22px; margin: 4px 0; }
+.note-card-text ul, .note-card-text ol { padding-left: 22px; margin: 4px 0; }
 .note-card-text li { margin: 2px 0; }
 .note-card-text b, .note-card-text strong { color: #fff; }
 
