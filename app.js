@@ -786,10 +786,20 @@ function smartDT(iso) {
 }
 
 /* meta line under a task/goal: created time + closed time */
+/* "13 Nov" this year, "13 Nov 2025" otherwise */
+function shortDate(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  const opts = { day: "numeric", month: "short" };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString("en-GB", opts);
+}
+
 function itemMetaHtml(item) {
   const bits = [];
-  if (item.createdAt) bits.push(`<span class="meta-chip" title="Created">＋ ${fmtDT(item.createdAt)}</span>`);
-  if (item.done && item.closedAt) bits.push(`<span class="meta-chip meta-closed" title="Completed">✓ ${fmtDT(item.closedAt)}</span>`);
+  if (item.due) bits.push(dueChipHtml(item));
+  if (item.done && item.closedAt) bits.push(`<span class="meta-chip meta-closed">Done ${shortDate(item.closedAt)}</span>`);
+  else if (item.createdAt) bits.push(`<span class="meta-chip">Added ${shortDate(item.createdAt)}</span>`);
   return bits.join("");
 }
 
@@ -1118,7 +1128,7 @@ function dueChipHtml(item) {
   const n = dueDelta(item.due);
   const cls = item.done ? "" : n < 0 ? "due-over" : n === 0 ? "due-today" : n <= 2 ? "due-soon" : "";
   const label = !item.done && n < 0 ? `Overdue · ${dueLabel(item.due)}` : dueLabel(item.due);
-  return `<span class="due-chip ${cls}" title="Due ${keyToDate(item.due).toDateString()}">${label}</span>`;
+  return `<span class="meta-due ${cls}">${!item.done && n < 0 ? label : "Due " + label}</span>`;
 }
 
 /* owner chip: only for tasks someone else owns */
@@ -3489,7 +3499,7 @@ function itemRowHtml(item, kind = "tasks") {
           <span class="item-meta">${itemMetaHtml(item)}</span>
         </span>
         <span class="item-badges">
-          ${dueChipHtml(item)}${ownerChipHtml(item)}
+          ${ownerChipHtml(item)}
           ${item.note ? `<button class="badge badge-note" data-notebtn title="Open doc">${NOTE_SVG}</button>` : ""}
           ${item.link ? `<a class="badge badge-link" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" title="${escapeHtml(item.link)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></a>` : ""}
           ${personChipsHtml(item)}
@@ -3542,7 +3552,6 @@ function workHtml(p) {
       <div class="goal-block ${g.done ? "done" : ""}" data-goal-block="${g.id}">
         <ul class="item-list goal-line">${itemRowHtml(g, "goals")}</ul>
         <div class="subtasks" data-section="tasks" data-goal="${g.id}">
-          <span class="sub-count section-count">${progressText(subs)}</span>
           <ul class="item-list">${subs.map((t) => itemRowHtml(t, "tasks")).join("")}</ul>
           ${addRowHtml("Add a subtask...", true)}
         </div>
@@ -3596,6 +3605,10 @@ function bindItemSection(kind, items, projectId, opts) {
   const own = (sel) => [...section.querySelectorAll(sel)].filter((el) => el.closest("[data-section]") === section);
   const input = own("[data-add-input]")[0];
   let selectedTag = null;
+
+  // the add row's buttons must not steal focus from the input: Safari/iOS
+  // don't focus buttons on click, so the input blurring would hide them
+  own(".add-row button").forEach((b) => b.addEventListener("pointerdown", (e) => e.preventDefault()));
 
   // tag picker (tasks only): click to select, click again to unselect
   own("[data-tag-btn]").forEach((btn) => {
@@ -3916,11 +3929,12 @@ function todayRowHtml({ task, space, goal }) {
       <span class="item-main">
         <span class="item-text">${task.tag ? `<span class="item-tag" style="--wt:${WIDGETS[task.tag].tint}">${WIDGETS[task.tag].icon}</span>` : ""}${escapeHtml(task.text)}</span>
         <span class="today-ctx">
+          ${dueChipHtml(task)}
           <button class="project-chip" data-tgoto="${space.ref}" title="Open space">${escapeHtml(space.label)}</button>
           ${goal ? `<span class="today-goal" title="Goal">${escapeHtml(goal.text)}</span>` : ""}
         </span>
       </span>
-      <span class="item-badges">${dueChipHtml(task)}${ownerChipHtml(task)}</span>
+      <span class="item-badges">${ownerChipHtml(task)}</span>
     </li>`;
 }
 

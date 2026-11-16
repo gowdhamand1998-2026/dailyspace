@@ -2172,15 +2172,16 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .goal-block.done > .subtasks { opacity: 0.6; }
 .subtasks .item-text { font-size: 13.5px; }
 .subtasks .item-check { width: 17px; height: 17px; border-radius: 6px; }
-.sub-count { display: block; font-size: 11px; margin: -2px 0 2px; }
-.sub-count:empty { display: none; }
-
-/* subtask add row stays quiet until you start typing in it */
-.subtasks .add-row { margin-top: 2px; }
-.subtasks .add-row input { background: transparent; border-color: transparent; padding: 6px 9px; font-size: 13px; }
-.subtasks .add-row input:focus { background: rgba(255, 255, 255, 0.06); border-color: var(--line); box-shadow: none; }
-.subtasks .add-row .tag-btn, .subtasks .add-row .btn { display: none; }
-.subtasks .add-row:focus-within .tag-btn, .subtasks .add-row:focus-within .btn { display: flex; }
+/* add-subtask row under each goal: always visible, tags show while typing */
+.subtasks .add-row { margin-top: 4px; }
+.subtasks .add-row input {
+  padding: 6px 10px; font-size: 13px;
+  background: transparent; border: 1px dashed var(--line-strong);
+}
+.subtasks .add-row input:focus { background: rgba(255, 255, 255, 0.06); border-style: solid; }
+.subtasks .add-row .btn { padding: 6px 12px; font-size: 12.5px; }
+.subtasks .add-row .tag-btn { display: none; width: 30px; height: 30px; }
+.subtasks .add-row:focus-within .tag-btn { display: flex; }
 
 /* task editor: which goal the task sits under */
 .editor-goal { margin-top: 2px; }
@@ -2262,7 +2263,8 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   letter-spacing: 0.01em;
 }
 .item-meta:empty { display: none; }
-.meta-chip { border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+.meta-chip { color: var(--text-3); }
+.item-meta > span + span::before { content: "·"; margin: 0 6px; color: var(--text-3); }
 .meta-sep { opacity: 0.5; }
 
 /* indicators attached to the text: part of the task, not floating */
@@ -3037,35 +3039,22 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 
 .archive-count[hidden] { display: none; }
 
-/* due dates & owners on task rows */
-.due-chip {
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 18px;
-  padding: 0 7px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  color: var(--text-2);
-  white-space: nowrap;
-}
-.due-chip.due-soon { color: #fbbf24; border-color: rgba(251, 191, 36, 0.35); }
-.due-chip.due-today { color: #fbbf24; background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.45); }
-.due-chip.due-over { color: #f87171; background: rgba(248, 113, 113, 0.12); border-color: rgba(248, 113, 113, 0.45); }
-.item.done .due-chip { opacity: 0.5; }
+/* due dates & owners on task rows: coloured text only where it matters */
+.meta-due { color: var(--text-2); font-weight: 500; }
+.meta-due.due-soon, .meta-due.due-today { color: #fbbf24; }
+.meta-due.due-over { color: #f87171; }
+.item.done .meta-due { color: var(--text-3); font-weight: 400; }
 
 .owner-chip {
   flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
-  padding: 0 7px;
-  border-radius: 999px;
-  color: var(--pc);
-  background: color-mix(in srgb, var(--pc) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--pc) 40%, transparent);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
   white-space: nowrap;
 }
+.owner-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--pc); }
 
 /* task editor: Under / Owner / Due on one wrapping row */
 .editor-goal { flex-wrap: wrap; row-gap: 6px; }
