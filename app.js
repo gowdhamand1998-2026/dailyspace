@@ -998,6 +998,8 @@ setInterval(() => {
 
 const app = document.getElementById("app");
 
+// Today is parked for now: flip to true to bring back the panel, dock button and phone landing
+const TODAY_ENABLED = false;
 let mobileHomeShown = false;
 
 function route() {
@@ -1008,12 +1010,12 @@ function route() {
   if (!mobileHomeShown) {
     mobileHomeShown = true;
     const h = window.location.hash;
-    if (IS_MOBILE && (!h || h === "#" || h === "#/")) {
+    if (TODAY_ENABLED && IS_MOBILE && (!h || h === "#" || h === "#/")) {
       history.replaceState(null, "", "#/today");
     }
   }
 
-  if (window.location.hash === "#/today") { renderTodayPage(); return; }
+  if (TODAY_ENABLED && window.location.hash === "#/today") { renderTodayPage(); return; }
 
   const wMatch = window.location.hash.match(/^#\/w\/(call|read|think|sign)$/);
   if (wMatch) { renderDesktop(null, wMatch[1]); return; }
@@ -1340,14 +1342,14 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
 
       ${state.projects.length ? "" : `<div class="desktop-hint">Your desktop is empty — press + in the dock to create a project</div>`}
 
-      ${IS_MOBILE ? "" : todayPanelHtml()}
+      ${IS_MOBILE || !TODAY_ENABLED ? "" : todayPanelHtml()}
 
       <div class="dock">
         <button class="dock-btn" data-tip="Add" data-dock-add>${ICONS.plus}</button>
         <div class="dock-sep"></div>
-        <button class="dock-btn" data-tip="Today" data-dock-today>${ICONS.today}
+        ${TODAY_ENABLED ? `<button class="dock-btn" data-tip="Today" data-dock-today>${ICONS.today}
           ${(() => { const n = todayUrgentCount(); return `<span class="archive-count" data-today-badge ${n ? "" : "hidden"}>${n}</span>`; })()}
-        </button>
+        </button>` : ""}
         <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="Tidy icons" data-dock-tidy>${ICONS.broom}</button>
         <div class="dock-sep"></div>
@@ -1452,7 +1454,7 @@ function wireDesktop() {
   // dock
   app.querySelector("[data-dock-add]").addEventListener("click", showAddChooser);
   app.querySelector("[data-dock-review]").addEventListener("click", () => (window.location.hash = "#/review"));
-  app.querySelector("[data-dock-today]").addEventListener("click", () => (window.location.hash = "#/today"));
+  app.querySelector("[data-dock-today]")?.addEventListener("click", () => (window.location.hash = "#/today"));
   wireTodayPanel();
   app.querySelector("[data-dock-tidy]").addEventListener("click", () => {
     if (IS_MOBILE) {
@@ -1735,11 +1737,17 @@ function showNewProjectModal() {
       goals: [],
       tasks: [],
       notes: "",
+      notesList: [],
+      links: [],
+      docs: [],
+      masterLink: "",
+      masterName: "",
       pos: defaultPos(state.projects.length),
       createdAt: new Date().toISOString(),
     };
     state.projects.push(project);
     persist();
+    close();
     window.location.hash = "#/p/" + project.id;
   }
 
