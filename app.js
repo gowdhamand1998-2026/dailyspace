@@ -1879,7 +1879,8 @@ function colNode(key) {
           <div class="colp-title">${escapeHtml(l.name || host)}</div>
           <div class="colp-sub colp-url">${escapeHtml(l.url)}</div>
           <div class="colp-actions">
-            <button class="btn btn-ghost btn-sm" data-colp-remove>Remove</button>
+            <button class="btn btn-ghost btn-sm btn-danger-ghost" data-colp-remove>Remove</button>
+            <button class="btn btn-ghost btn-sm" data-colp-editlink>Edit</button>
             <button class="btn btn-primary btn-sm" data-colp-open>Open link</button>
           </div>
         </div>`,
@@ -2027,6 +2028,8 @@ function colTaskPreview(t, p, ref) {
       ${note ? `<div class="colp-note colp-note-sm">${noteBodyHtml(t.note)}</div>` : ""}
       ${t.link ? `<a class="colp-link" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">Link<span>${escapeHtml(t.link)}</span></a>` : ""}
       <div class="colp-actions">
+        <button class="btn btn-ghost btn-sm btn-danger-ghost" data-colp-delete>Delete</button>
+        <button class="btn btn-ghost btn-sm" data-colp-edititem>Edit</button>
         <button class="btn btn-ghost btn-sm" data-colp-toggle>${t.done ? "Reopen" : "Mark done"}</button>
         <button class="btn btn-primary btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button>
       </div>
@@ -2084,6 +2087,7 @@ function colRowHtml(key, selected, depth) {
       ${lead}
       <span class="col-label">${escapeHtml(n.label)}</span>
       <span class="col-trail">${trail}</span>
+      ${colTarget(key) ? `<button class="col-more" data-col-more="${escapeHtml(key)}" aria-label="More actions" title="More">${MORE_SVG}</button>` : ""}
       ${n.folder ? `<span class="col-chev">${CHEVRON_R}</span>` : ""}
     </div>`;
 }
@@ -2107,7 +2111,10 @@ function columnsHtml() {
     cols.push(`
       <div class="col ${depth === colPath.length - 1 ? "col-active" : ""}" data-col="${depth}" role="listbox" aria-label="${escapeHtml(node.title || "")}">
         <div class="col-head"><span>${escapeHtml(node.title || "")}</span>
-          ${depth > 0 && node.open ? `<button class="col-head-open" data-col-open="${escapeHtml(keys[depth])}" title="Open">Open ${CHEVRON_R}</button>` : ""}
+          <span class="col-head-actions">
+            ${depth > 0 && colMenu(keys[depth]).length ? `<button class="col-more col-more-head" data-col-more="${escapeHtml(keys[depth])}" aria-label="More actions" title="More">${MORE_SVG}</button>` : ""}
+            ${depth > 0 && node.open ? `<button class="col-head-open" data-col-open="${escapeHtml(keys[depth])}" title="Open">Open ${CHEVRON_R}</button>` : ""}
+          </span>
         </div>
         <div class="col-body">${body.trim() ? body : `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`}</div>
       </div>`);
@@ -2137,7 +2144,7 @@ function columnsHtml() {
       <div class="cols-mbar">
         ${colPath.length ? `<button class="cols-back" data-cols-back>&larr; <span>${escapeHtml(backTitle)}</span></button>` : ""}
         <span class="cols-mtitle">${escapeHtml(curTitle)}</span>
-        ${lastNode && lastNode.open ? `<button class="cols-mopen" data-cols-open>Open</button>` : ""}
+        ${last && colMenu(last).length ? `<button class="col-more cols-mmore" data-col-more="${escapeHtml(last)}" aria-label="More actions">${MORE_SVG}</button>` : ""}
       </div>
       <div class="cols-scroll" data-cols-scroll>${cols.join("")}</div>
     </div>`;
@@ -2191,7 +2198,7 @@ function wireColumns() {
   if (!root) return;
   root.querySelectorAll("[data-col-key]").forEach((row) => {
     row.addEventListener("click", (e) => {
-      if (e.target.closest("[data-col-check]")) return;
+      if (e.target.closest("[data-col-check], [data-col-more], .col-rename")) return;
       colSelect(+row.dataset.colDepth, row.dataset.colKey);
     });
     row.addEventListener("dblclick", (e) => {
@@ -2200,6 +2207,19 @@ function wireColumns() {
       if (n && n.open) n.open();
     });
   });
+  root.querySelectorAll("[data-col-more]").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (b.classList.contains("open")) { closeColMenu(); return; }
+      openColMenu(b.dataset.colMore, b);
+    });
+    b.addEventListener("dblclick", (e) => e.stopPropagation());
+  });
+  root.querySelectorAll("[data-col-key]").forEach((row) => row.addEventListener("contextmenu", (e) => {
+    if (!colMenu(row.dataset.colKey).length) return;
+    e.preventDefault();
+    openColMenu(row.dataset.colKey, null, { x: e.clientX, y: e.clientY });
+  }));
   root.querySelectorAll("[data-col-check]").forEach((b) =>
     b.addEventListener("click", (e) => { e.stopPropagation(); colToggleTask(b.dataset.colCheck); }));
   const last = colPath[colPath.length - 1];
@@ -2215,15 +2235,10 @@ function wireColumns() {
     const act = n && n.sections[+si] && n.sections[+si].action;
     if (act) act.run();
   }));
-  root.querySelector("[data-colp-remove]")?.addEventListener("click", () => {
-    if (!lastNode || !lastNode.remove) return;
-    showConfirm({ title: "Remove link?", message: "It comes off this space." }, () => {
-      lastNode.remove();
-      persist();
-      colPath = colPath.slice(0, -1);
-      saveColPath();
-      redrawColumns(colPath[colPath.length - 1]);
-    });
+  root.querySelector("[data-colp-remove]")?.addEventListener("click", () => colDelete(last));
+  root.querySelector("[data-colp-editlink]")?.addEventListener("click", () => {
+    const t = colTarget(last);
+    if (t) openLinkSheet({ ref: colSplit(last)[1].split(":")[0], link: t.obj });
   });
   if (lastNode && lastNode.note) {
     const note = lastNode.note;
@@ -2259,6 +2274,11 @@ function wireColumns() {
       if (row) row.textContent = plainText(rootEd.innerHTML).slice(0, 160) || "New note";
     });
   }
+  root.querySelector("[data-colp-delete]")?.addEventListener("click", () => colDelete(last));
+  root.querySelector("[data-colp-edititem]")?.addEventListener("click", () => {
+    const t = colTarget(last);
+    if (t) openItemSheet({ ref: t.ref, kind: "task", item: t.obj });
+  });
   root.querySelector("[data-colp-toggle]")?.addEventListener("click", () => colToggleTask(last));
   root.querySelector("[data-cols-back]")?.addEventListener("click", () => {
     colPath = colPath.slice(0, -1);
@@ -2272,6 +2292,11 @@ document.addEventListener("keydown", (e) => {
   if (!app.querySelector("[data-columns]")) return;
   if (app.querySelector(".window-backdrop, .projectpage")) return;
   if (e.target.closest && e.target.closest("input, textarea, [contenteditable=true]")) return;
+  if (e.metaKey && e.key === "Backspace") {
+    const sel = colPath[colPath.length - 1];
+    if (sel && colTarget(sel) && colTarget(sel).remove) { e.preventDefault(); colDelete(sel); }
+    return;
+  }
   if (e.metaKey && e.key !== "ArrowDown") return;
   const depth = Math.max(0, colPath.length - 1);
   const col = app.querySelector(`.col[data-col="${depth}"]`);
@@ -2419,10 +2444,283 @@ function autoGrow(ta) {
   ta.style.height = Math.min(ta.scrollHeight, 220) + "px";
 }
 
+/* ---------- edit anything in the columns ----------
+   every row has a ⋯ menu (also right-click); column headers carry one for
+   the thing that column belongs to. Rename happens inline, Finder-style. */
+
+/* what a key points at: the object, the field holding its name, how to remove it */
+function colTarget(key) {
+  const [kind, rest] = colSplit(key);
+  if (kind === "p") {
+    const p = containerByRef(rest);
+    if (!p) return null;
+    const isSub = rest.includes("~");
+    return {
+      obj: p, field: "name", noun: isSub ? "sub-project" : "space",
+      remove: () => {
+        if (isSub) {
+          const parent = containerByRef(parentRefOf(rest));
+          parent.tracker.items = parent.tracker.items.filter((c) => c.id !== p.id);
+        } else {
+          state.projects = state.projects.filter((x) => x.id !== p.id);
+          state.collections.forEach((c) => { c.items = c.items.filter((i) => !(i.type === "project" && i.id === p.id)); });
+          state.archived = state.archived.filter((a) => !(a.type === "project" && a.id === p.id));
+        }
+      },
+      confirmMsg: `Delete "${p.name}" with all its goals, tasks, notes and links? This can't be undone.`,
+    };
+  }
+  if (kind === "g") {
+    const [ref, gid] = rest.split(":");
+    const p = containerByRef(ref);
+    const g = p && p.goals.find((x) => x.id === gid);
+    if (!g) return null;
+    const subs = p.tasks.filter((t) => t.goalId === gid).length;
+    return {
+      obj: g, field: "text", noun: "goal", p, ref,
+      remove: () => {
+        p.goals = p.goals.filter((x) => x.id !== gid);
+        p.tasks.forEach((t) => { if (t.goalId === gid) delete t.goalId; });
+      },
+      confirmMsg: subs
+        ? `Delete "${g.text}"? Its ${subs} subtask${subs === 1 ? "" : "s"} move to Others.`
+        : `Delete "${g.text}"?`,
+    };
+  }
+  if (kind === "t") {
+    const [ref, tid] = rest.split(":");
+    const p = containerByRef(ref);
+    const t = p && p.tasks.find((x) => x.id === tid);
+    if (!t) return null;
+    return {
+      obj: t, field: "text", noun: "task", p, ref,
+      remove: () => { p.tasks = p.tasks.filter((x) => x.id !== tid); },
+      confirmMsg: `Delete "${t.text}"?`,
+    };
+  }
+  if (kind === "n") {
+    const [ref, nid] = rest.split(":");
+    const p = containerByRef(ref);
+    const n = p && p.notesList.find((x) => x.id === nid);
+    if (!n) return null;
+    return {
+      obj: n, noun: "note",
+      remove: () => { p.notesList = p.notesList.filter((x) => x.id !== nid); },
+      confirmMsg: "Delete this note and everything added to it?",
+    };
+  }
+  if (kind === "pl") {
+    const [ref, lid] = rest.split(":");
+    const p = containerByRef(ref);
+    const l = p && p.links.find((x) => x.id === lid);
+    if (!l) return null;
+    return {
+      obj: l, field: "name", noun: "link", link: true,
+      remove: () => { p.links = p.links.filter((x) => x.id !== lid); },
+      confirmMsg: `Remove "${l.name}" from ${p.name}?`,
+    };
+  }
+  if (kind === "l") {
+    const l = state.links.find((x) => x.id === rest);
+    if (!l) return null;
+    return {
+      obj: l, field: "name", noun: "link", link: true,
+      remove: () => {
+        state.links = state.links.filter((x) => x.id !== rest);
+        state.collections.forEach((c) => { c.items = c.items.filter((i) => !(i.type === "link" && i.id === rest)); });
+        state.archived = state.archived.filter((a) => !(a.type === "link" && a.id === rest));
+      },
+      confirmMsg: `Delete "${l.name}"?`,
+    };
+  }
+  if (kind === "c") {
+    const c = state.collections.find((x) => x.id === rest);
+    if (!c) return null;
+    return {
+      obj: c, field: "name", noun: "collection",
+      remove: () => {
+        state.collections = state.collections.filter((x) => x.id !== rest);
+        state.archived = state.archived.filter((a) => !(a.type === "collection" && a.id === rest));
+      },
+      confirmMsg: `Delete "${c.name}"? What's inside moves back to Home.`,
+    };
+  }
+  if (kind === "per") {
+    const per = personById(rest);
+    return per ? { obj: per, field: "name", noun: "person" } : null;
+  }
+  return null;
+}
+
+function colMenu(key) {
+  const [kind, rest] = colSplit(key);
+  const t = colTarget(key);
+  const node = colNode(key);
+  const items = [];
+  if (!t && !node) return items;
+  if (node && node.open) items.push({ label: kind === "l" || kind === "pl" ? "Open link" : "Open", run: () => node.open() });
+  if (t && t.field) items.push({ label: "Rename", run: () => colRename(key) });
+  if (kind === "t") {
+    items.push({ label: "Edit details…", run: () => openItemSheet({ ref: t.ref, kind: "task", item: t.obj }) });
+    items.push({ label: t.obj.done ? "Mark not done" : "Mark done", run: () => colToggleTask(key) });
+  }
+  if (kind === "g") {
+    items.push({ label: "Edit details…", run: () => openItemSheet({ ref: t.ref, kind: "goal", item: t.obj }) });
+    items.push({ label: "Add subtask", run: () => openItemSheet({ ref: t.ref, kind: "task", goalId: t.obj.id }) });
+    items.push({ label: t.obj.done ? "Mark not done" : "Mark done", run: () => {
+      t.obj.done = !t.obj.done;
+      t.obj.closedAt = t.obj.done ? new Date().toISOString() : null;
+      persist(); redrawColumns(key);
+    } });
+  }
+  if (kind === "o") items.push({ label: "Add task", run: () => openItemSheet({ ref: rest, kind: "task", goalId: "" }) });
+  if (t && t.link) items.push({ label: "Edit link…", run: () => openLinkSheet({ ref: kind === "pl" ? rest.split(":")[0] : null, link: t.obj }) });
+  if (kind === "p" && !rest.includes("~")) {
+    items.push({ sep: true });
+    items.push({ label: "Archive", run: () => {
+      state.archived.push({ type: "project", id: rest });
+      persist(); colDropFromPath(key);
+    } });
+  }
+  if (kind === "c") {
+    items.push({ sep: true });
+    items.push({ label: "Archive", run: () => {
+      state.archived.push({ type: "collection", id: rest });
+      persist(); colDropFromPath(key);
+    } });
+  }
+  if (t && t.remove) {
+    if (!items.length || !items[items.length - 1].sep) items.push({ sep: true });
+    items.push({ label: kind === "pl" ? "Remove" : "Delete", danger: true, run: () => colDelete(key) });
+  }
+  return items;
+}
+
+/* forget a key (and everything after it) in the open path */
+function colDropFromPath(key) {
+  const i = colPath.indexOf(key);
+  if (i >= 0) colPath = colPath.slice(0, i);
+  saveColPath();
+  redrawColumns(colPath[colPath.length - 1]);
+}
+
+function colDelete(key) {
+  const t = colTarget(key);
+  if (!t || !t.remove) return;
+  showConfirm({ title: `Delete ${t.noun}?`, message: t.confirmMsg, confirmLabel: colSplit(key)[0] === "pl" ? "Remove" : "Delete" }, () => {
+    t.remove();
+    persist();
+    colDropFromPath(key);
+  });
+}
+
+/* inline rename in the row when it's on screen, a small sheet otherwise (phones) */
+function colRename(key) {
+  const t = colTarget(key);
+  if (!t || !t.field) return;
+  const row = app.querySelector(`[data-col-key="${CSS.escape(key)}"]`);
+  const label = row && row.offsetParent ? row.querySelector(".col-label") : null;
+  const commit = (val) => {
+    const v = val.trim();
+    if (v && v !== t.obj[t.field]) {
+      t.obj[t.field] = v;
+      if (t.noun === "note") t.obj.updatedAt = new Date().toISOString();
+      persist();
+    }
+    redrawColumns(key);
+  };
+  if (!label) {
+    const sheet = sheetOpen({ title: `Rename ${t.noun}`, body: `<input type="text" data-sheet-name maxlength="200" />`, primary: "Save" });
+    if (!sheet) return;
+    const input = sheet.el.querySelector("[data-sheet-name]");
+    input.value = t.obj[t.field] || "";
+    input.focus(); input.select();
+    const done = () => { sheet.close(); commit(input.value); };
+    sheet.el.querySelector("[data-sheet-ok]").addEventListener("click", done);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); done(); } });
+    return;
+  }
+  const input = document.createElement("textarea");
+  input.className = "col-rename";
+  input.rows = 1;
+  input.value = t.obj[t.field] || "";
+  label.replaceWith(input);
+  row.classList.add("renaming");
+  autoGrow(input);
+  input.focus(); input.select();
+  let finished = false;
+  const finish = (save) => {
+    if (finished) return;
+    finished = true;
+    if (save) commit(input.value); else redrawColumns(key);
+  };
+  input.addEventListener("input", () => autoGrow(input));
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); finish(true); }
+    if (e.key === "Escape") { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener("blur", () => finish(true));
+  ["click", "dblclick", "pointerdown"].forEach((ev) => input.addEventListener(ev, (e) => e.stopPropagation()));
+}
+
+/* the floating ⋯ menu */
+function closeColMenu() {
+  document.querySelectorAll(".col-menu").forEach((m) => m.remove());
+  document.querySelectorAll(".col-more.open").forEach((b) => b.classList.remove("open"));
+}
+
+function openColMenu(key, anchor, at) {
+  closeColMenu();
+  const items = colMenu(key);
+  if (!items.length) return;
+  const m = document.createElement("div");
+  m.className = "col-menu";
+  m.setAttribute("role", "menu");
+  m.innerHTML = items.map((it, i) => it.sep
+    ? `<div class="col-menu-sep"></div>`
+    : `<button class="col-menu-item ${it.danger ? "danger" : ""}" role="menuitem" data-mi="${i}">${escapeHtml(it.label)}</button>`).join("");
+  document.body.appendChild(m);
+  const r = at || (anchor ? anchor.getBoundingClientRect() : { left: 20, bottom: 20, top: 20, right: 20 });
+  const mw = m.offsetWidth, mh = m.offsetHeight;
+  let x = at ? at.x : r.right - mw;
+  let y = at ? at.y : r.bottom + 4;
+  if (x + mw > window.innerWidth - 8) x = window.innerWidth - mw - 8;
+  if (x < 8) x = 8;
+  if (y + mh > window.innerHeight - 8) y = Math.max(8, (at ? at.y : r.top) - mh - 4);
+  m.style.left = x + "px";
+  m.style.top = y + "px";
+  if (anchor) anchor.classList.add("open");
+  m.querySelectorAll("[data-mi]").forEach((b) => b.addEventListener("click", () => {
+    closeColMenu();
+    items[+b.dataset.mi].run();
+  }));
+  const first = m.querySelector("[data-mi]");
+  if (first) first.focus({ preventScroll: true });
+  m.addEventListener("keydown", (e) => {
+    const btns = [...m.querySelectorAll("[data-mi]")];
+    const i = btns.indexOf(document.activeElement);
+    if (e.key === "ArrowDown") { e.preventDefault(); btns[(i + 1) % btns.length].focus(); }
+    if (e.key === "ArrowUp") { e.preventDefault(); btns[(i - 1 + btns.length) % btns.length].focus(); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeColMenu(); }
+    e.stopPropagation();
+  });
+  setTimeout(() => {
+    const off = (e) => {
+      if (m.contains(e.target)) return;
+      closeColMenu();
+      document.removeEventListener("pointerdown", off, true);
+    };
+    document.addEventListener("pointerdown", off, true);
+  }, 0);
+}
+
+const MORE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>';
+
 /* ---------- add / edit sheets used by the columns ----------
    one calm modal per thing you create: a goal, a task, a note, a link */
 
-function sheetOpen({ kicker, title, body, primary, more }) {
+function sheetOpen({ kicker, title, body, primary, more, del }) {
   if (app.querySelector(".window-backdrop")) return null;
   const backdrop = document.createElement("div");
   backdrop.className = "window-backdrop";
@@ -2433,6 +2731,7 @@ function sheetOpen({ kicker, title, body, primary, more }) {
       ${body}
       <div class="sheet-foot">
         ${more ? `<label class="sheet-more"><input type="checkbox" data-sheet-more /> <span>Add another</span></label>` : ""}
+        ${del ? `<button class="btn btn-ghost btn-danger-ghost sheet-del" data-sheet-del>Delete</button>` : ""}
         <span class="sheet-flash" data-sheet-flash></span>
         <button class="btn btn-ghost" data-sheet-cancel>Cancel</button>
         <button class="btn btn-primary" data-sheet-ok>${escapeHtml(primary)}</button>
@@ -2460,13 +2759,14 @@ function colRevealPath(ref, tail) {
   redrawColumns(tail[tail.length - 1]);
 }
 
-function openItemSheet({ ref, kind, goalId = "" }) {
+function openItemSheet({ ref, kind, goalId = "", item: editing = null }) {
   const p = containerByRef(ref);
   if (!p) return;
   const isGoal = kind === "goal";
+  if (editing && !isGoal) goalId = editing.goalId && p.goals.some((g) => g.id === editing.goalId) ? editing.goalId : "";
   const goal = goalId && p.goals.find((g) => g.id === goalId);
   const goalOpts = p.goals.filter((g) => !g.done || g.id === goalId);
-  let tag = null;
+  let tag = editing ? editing.tag || null : null;
   const body = `
     <textarea class="sheet-text" rows="2" data-sheet-text placeholder="${isGoal ? "What do you want to achieve?" : "What needs doing?"}"></textarea>
     <div class="sheet-grid">
@@ -2480,24 +2780,32 @@ function openItemSheet({ ref, kind, goalId = "" }) {
       <label class="sheet-field"><span>Owner</span>
         <select data-sheet-owner>
           <option value="">Me</option>
-          ${state.people.slice().sort((a, b) => a.name.localeCompare(b.name)).map((per) => `<option value="${per.id}">${escapeHtml(per.name)}</option>`).join("")}
+          ${state.people.slice().sort((a, b) => a.name.localeCompare(b.name)).map((per) => `<option value="${per.id}" ${editing && editing.owner === per.id ? "selected" : ""}>${escapeHtml(per.name)}</option>`).join("")}
         </select>
       </label>
-      <label class="sheet-field"><span>Due</span><input type="date" data-sheet-due /></label>
+      <label class="sheet-field"><span>Due</span><input type="date" data-sheet-due value="${editing && editing.due ? editing.due : ""}" /></label>
     </div>
     ${isGoal ? "" : `
     <div class="sheet-tags"><span>List</span>
-      ${Object.keys(WIDGETS).map((t) => `<button type="button" class="tag-btn" data-sheet-tag="${t}" style="--wt:${WIDGETS[t].tint}" title="${WIDGETS[t].label}" aria-pressed="false">${WIDGETS[t].icon}</button>`).join("")}
+      ${Object.keys(WIDGETS).map((t) => `<button type="button" class="tag-btn ${tag === t ? "active" : ""}" data-sheet-tag="${t}" style="--wt:${WIDGETS[t].tint}" title="${WIDGETS[t].label}" aria-pressed="${tag === t}">${WIDGETS[t].icon}</button>`).join("")}
     </div>`}`;
   const sheet = sheetOpen({
     kicker: escapeHtml(p.name) + (goal ? " › " + escapeHtml(goal.text) : !isGoal && !goalId ? " › Others" : ""),
-    title: isGoal ? "New goal" : goal ? "New subtask" : "New task",
-    body, primary: isGoal ? "Add goal" : "Add", more: true,
+    title: editing ? (isGoal ? "Edit goal" : "Edit task") : isGoal ? "New goal" : goal ? "New subtask" : "New task",
+    body, primary: editing ? "Save" : isGoal ? "Add goal" : "Add", more: !editing,
+    del: !!editing,
   });
   if (!sheet) return;
   const $ = (q) => sheet.el.querySelector(q);
   const text = $("[data-sheet-text]");
+  if (editing) { text.value = editing.text; autoGrow(text); }
   text.focus();
+  if (editing) {
+    $("[data-sheet-del]").addEventListener("click", () => {
+      sheet.close();
+      colDelete((isGoal ? "g:" : "t:") + ref + ":" + editing.id);
+    });
+  }
   text.addEventListener("input", () => autoGrow(text));
   sheet.el.querySelectorAll("[data-sheet-tag]").forEach((b) => b.addEventListener("click", () => {
     tag = tag === b.dataset.sheetTag ? null : b.dataset.sheetTag;
@@ -2510,6 +2818,27 @@ function openItemSheet({ ref, kind, goalId = "" }) {
   function submit() {
     const t = text.value.trim();
     if (!t) { text.focus(); return; }
+    if (editing) {
+      editing.text = t;
+      const owner = $("[data-sheet-owner]").value;
+      const due = $("[data-sheet-due]").value;
+      if (owner) editing.owner = owner; else delete editing.owner;
+      if (due) editing.due = due; else delete editing.due;
+      let tail;
+      if (isGoal) tail = ["g:" + ref + ":" + editing.id];
+      else {
+        const gid = $("[data-sheet-goal]").value;
+        if (gid) editing.goalId = gid; else delete editing.goalId;
+        if (tag) editing.tag = tag; else delete editing.tag;
+        tail = [gid ? "g:" + ref + ":" + gid : "o:" + ref, "t:" + ref + ":" + editing.id];
+      }
+      persist();
+      sheet.close();
+      // tasks reached through a list (Calls, a person…) stay where they were
+      if (colPath.includes("p:" + ref)) colRevealPath(ref, tail);
+      else redrawColumns(colPath[colPath.length - 1]);
+      return;
+    }
     const item = { id: uid(), text: t, done: false, createdAt: new Date().toISOString() };
     const owner = $("[data-sheet-owner]").value;
     const due = $("[data-sheet-due]").value;
@@ -2544,20 +2873,21 @@ function openItemSheet({ ref, kind, goalId = "" }) {
   });
 }
 
-function openLinkSheet({ ref }) {
-  const p = containerByRef(ref);
-  if (!p) return;
+function openLinkSheet({ ref, link: editing = null }) {
+  const p = ref ? containerByRef(ref) : null;
+  if (ref && !p) return;
   const sheet = sheetOpen({
-    kicker: escapeHtml(p.name) + " › Links",
-    title: "Add link",
+    kicker: p ? escapeHtml(p.name) + " › Links" : "Home › Links",
+    title: editing ? "Edit link" : "Add link",
     body: `
       <input type="text" data-sheet-url placeholder="Paste a URL (e.g. docs.google.com/…)" inputmode="url" autocomplete="off" />
       <input type="text" data-sheet-name placeholder="Name (optional)" maxlength="80" />`,
-    primary: "Add link",
+    primary: editing ? "Save" : "Add link",
   });
   if (!sheet) return;
   const url = sheet.el.querySelector("[data-sheet-url]");
   const name = sheet.el.querySelector("[data-sheet-name]");
+  if (editing) { url.value = editing.url || ""; name.value = editing.name || ""; }
   url.focus();
   function submit() {
     let u = url.value.trim();
@@ -2565,6 +2895,14 @@ function openLinkSheet({ ref }) {
     if (!/^https?:\/\//i.test(u)) u = "https://" + u;
     let host = "";
     try { host = new URL(u).hostname.replace(/^www\./, ""); } catch { url.focus(); return; }
+    if (editing) {
+      editing.url = u;
+      editing.name = name.value.trim() || host;
+      persist();
+      sheet.close();
+      redrawColumns(colPath[colPath.length - 1]);
+      return;
+    }
     const l = { id: uid(), url: u, name: name.value.trim() || host };
     p.links.push(l);
     persist();
