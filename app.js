@@ -1280,7 +1280,6 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
       <div class="menubar">
         <div class="menubar-left">
           <span class="wordmark">Daily<em>Space</em></span>
-          ${viewSwitchHtml()}
         </div>
         <div class="menubar-right">
           <button class="sync-chip" id="sync-chip" data-sync data-state="${cloud.status}">${syncChipHtml()}</button>
@@ -1455,7 +1454,6 @@ function wireDesktop() {
     });
   }
 
-  wireViewSwitch();
   if (homeView() === "columns") {
     wireColumns();
     const sc = app.querySelector("[data-cols-scroll]");
@@ -1716,10 +1714,6 @@ function showAddChooser() {
    The view lives in state.homeView and syncs; the open path in the columns
    is a per-device convenience kept in localStorage. */
 
-const HOME_VIEWS = [
-  { key: "desktop", label: "Desktop", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg>' },
-  { key: "columns", label: "Columns", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M15 4v16"/></svg>' },
-];
 const CHEVRON_R = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
 const COL_ICONS = {
   goal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>',
@@ -1728,45 +1722,7 @@ const COL_ICONS = {
   links: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
 };
 
-function homeView() { return state.homeView === "columns" ? "columns" : "desktop"; }
-
-function viewSwitchHtml() {
-  const cur = HOME_VIEWS.find((v) => v.key === homeView());
-  return `
-    <div class="view-switch" data-view-switch>
-      <button class="view-btn" data-view-btn aria-haspopup="menu" aria-expanded="false">
-        ${cur.icon}<span>${cur.label}</span>
-        <svg class="view-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <div class="view-menu" role="menu">
-        <div class="view-menu-label">View as</div>
-        ${HOME_VIEWS.map((v) => `
-          <button class="view-opt ${v.key === cur.key ? "active" : ""}" data-view="${v.key}" role="menuitemradio" aria-checked="${v.key === cur.key}">
-            ${v.icon}<span>${v.label}</span>
-            <svg class="view-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
-          </button>`).join("")}
-      </div>
-    </div>`;
-}
-
-function wireViewSwitch() {
-  const wrap = app.querySelector("[data-view-switch]");
-  if (!wrap) return;
-  const btn = wrap.querySelector("[data-view-btn]");
-  const setOpen = (on) => { wrap.classList.toggle("open", on); btn.setAttribute("aria-expanded", on); };
-  btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!wrap.classList.contains("open")); });
-  wrap.querySelectorAll("[data-view]").forEach((o) => o.addEventListener("click", () => {
-    setOpen(false);
-    if (o.dataset.view === homeView()) return;
-    state.homeView = o.dataset.view;
-    persist();
-    renderDesktop(null);
-  }));
-  document.addEventListener("pointerdown", function off(e) {
-    if (!document.body.contains(wrap)) { document.removeEventListener("pointerdown", off); return; }
-    if (!wrap.contains(e.target)) setOpen(false);
-  });
-}
+function homeView() { return "columns"; } // the icon desktop is retired
 
 /* ---- the column tree ----
    keys: root · p:<ref> · g:<ref>:<goalId> · o:<ref> (Others) · nl:<ref> (Notes)
@@ -1838,7 +1794,7 @@ function colNode(key) {
     const accent = isSub ? kcolor(p.name) : accentFor(rest);
     const st = spaceStats(p);
     const subs = p.tracker ? p.tracker.items.filter((c) => c.stage !== "closed") : [];
-    const loose = looseTasks(p);
+    const goals = p.goals.slice().sort(colTaskSort);
     return {
       title: p.name,
       label: p.name,
@@ -1847,92 +1803,66 @@ function colNode(key) {
       folder: true,
       open: () => (window.location.hash = "#/p/" + rest),
       sections: [
-        { title: p.tracker ? p.tracker.name : "", keys: subs.map((c) => "p:" + rest + "~" + c.id) },
-        { title: "Goals", keys: p.goals.slice().sort(colTaskSort).map((g) => "g:" + rest + ":" + g.id) },
-        { title: "", keys: [
-          "o:" + rest,
-          "nl:" + rest,
-          ...(p.links.length ? ["lk:" + rest] : []),
-        ] },
+        ...(p.tracker ? [{ title: p.tracker.name, keys: subs.map((c) => "p:" + rest + "~" + c.id) }] : []),
+        { title: "Goals", keys: [...goals.map((g) => "g:" + rest + ":" + g.id), "o:" + rest],
+          action: { label: "Add goal", run: () => openItemSheet({ ref: rest, kind: "goal" }) } },
+        { title: "Notes", keys: p.notesList.map((n) => "n:" + rest + ":" + n.id),
+          empty: "No notes yet",
+          action: { label: "New note", run: () => openNoteSheet({ ref: rest }) } },
+        { title: "Links", keys: p.links.map((l) => "pl:" + rest + ":" + l.id),
+          empty: "No links yet",
+          action: { label: "Add link", run: () => openLinkSheet({ ref: rest }) } },
       ],
     };
   }
-  if (kind === "g") {
+  if (kind === "g" || kind === "o") {
     const [ref, gid] = rest.split(":");
     const p = containerByRef(ref);
-    const g = p && p.goals.find((x) => x.id === gid);
-    if (!g) return null;
-    const subs = p.tasks.filter((t) => t.goalId === gid).sort(colTaskSort);
+    if (!p) return null;
+    const g = kind === "g" ? p.goals.find((x) => x.id === gid) : null;
+    if (kind === "g" && !g) return null;
+    const subs = (g ? p.tasks.filter((t) => t.goalId === gid) : looseTasks(p)).sort(colTaskSort);
     const open = subs.filter((t) => !t.done).length;
     return {
-      title: g.text,
-      label: g.text,
-      done: g.done,
-      icon: `<span class="col-glyph col-goal">${COL_ICONS.goal}</span>`,
+      title: g ? g.text : "Others",
+      label: g ? g.text : "Others",
+      done: g ? g.done : false,
+      icon: `<span class="col-glyph ${g ? "col-goal" : "col-goal col-goal-others"}">${COL_ICONS.goal}</span>`,
       meta: open ? String(open) : "",
       folder: true,
       open: () => openSpaceTab(ref, "work"),
-      emptyText: "No subtasks yet",
-      compose: { placeholder: "Add a subtask…", add: (text) => {
-        const t = { id: uid(), text, done: false, createdAt: new Date().toISOString(), goalId: gid };
-        p.tasks.push(t);
-        return "t:" + ref + ":" + t.id;
-      } },
-      sections: [{ title: "", keys: subs.map((t) => "t:" + ref + ":" + t.id) }],
+      sections: [{
+        title: g ? "Subtasks" : "Tasks",
+        keys: subs.map((t) => "t:" + ref + ":" + t.id),
+        empty: g ? "No subtasks yet" : "Tasks that sit under no goal land here",
+        action: { label: g ? "Add subtask" : "Add task", run: () => openItemSheet({ ref, kind: "task", goalId: g ? gid : "" }) },
+      }],
     };
   }
-  if (kind === "o") {
-    const p = containerByRef(rest);
-    if (!p) return null;
-    const loose = looseTasks(p).sort(colTaskSort);
-    const open = loose.filter((t) => !t.done).length;
+  if (kind === "pl") {
+    const [ref, lid] = rest.split(":");
+    const p = containerByRef(ref);
+    const l = p && p.links.find((x) => x.id === lid);
+    if (!l) return null;
+    let host = "";
+    try { host = new URL(l.url).hostname.replace(/^www\./, ""); } catch {}
     return {
-      title: "Others", label: "Others",
-      icon: `<span class="col-glyph">${COL_ICONS.stack}</span>`,
-      meta: open ? String(open) : "", folder: true,
-      open: () => openSpaceTab(rest, "work"),
-      emptyText: "No loose tasks",
-      compose: { placeholder: "Add a task…", add: (text) => {
-        const t = { id: uid(), text, done: false, createdAt: new Date().toISOString() };
-        p.tasks.push(t);
-        return "t:" + rest + ":" + t.id;
-      } },
-      sections: [{ title: "", keys: loose.map((t) => "t:" + rest + ":" + t.id) }],
-    };
-  }
-  if (kind === "nl") {
-    const p = containerByRef(rest);
-    if (!p) return null;
-    return {
-      title: "Notes", label: "Notes",
-      icon: `<span class="col-glyph">${COL_ICONS.note}</span>`,
-      meta: p.notesList.length ? String(p.notesList.length) : "", folder: true,
-      open: () => openSpaceTab(rest, "notes"),
-      emptyText: "No notes yet",
-      compose: { placeholder: "Write a new note…", multiline: true, add: (text) => {
-        const now = new Date().toISOString();
-        const n = { id: uid(), text: escapeHtml(text).replace(/\n/g, "<br>"), createdAt: now, updatedAt: now };
-        p.notesList.unshift(n);
-        return "n:" + rest + ":" + n.id;
-      } },
-      sections: [{ title: "", keys: p.notesList.map((n) => "n:" + rest + ":" + n.id) }],
-    };
-  }
-  if (kind === "lk") {
-    const p = containerByRef(rest);
-    if (!p) return null;
-    return {
-      title: "Links", label: "Links",
-      icon: `<span class="col-glyph">${COL_ICONS.links}</span>`,
-      meta: String(p.links.length), folder: true,
-      open: () => openSpaceTab(rest, "links"),
+      label: l.name || host || "Link",
+      icon: `<span class="col-tile col-tile-link"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>`,
+      meta: escapeHtml(host),
+      open: () => window.open(l.url, "_blank", "noopener"),
       preview: () => `
         <div class="colp">
-          <div class="colp-kicker">Links · ${escapeHtml(p.name)}</div>
-          <div class="colp-links">
-            ${p.links.map((l) => `<a class="colp-link" href="${escapeHtml(l.url || "")}" target="_blank" rel="noopener">${escapeHtml(l.name || l.text || l.url || "Link")}<span>${escapeHtml(l.url || "")}</span></a>`).join("")}
+          <div class="colp-kicker">Link · ${escapeHtml(p.name)}</div>
+          <div class="colp-hero"><span class="col-tile col-tile-link col-tile-lg"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span></div>
+          <div class="colp-title">${escapeHtml(l.name || host)}</div>
+          <div class="colp-sub colp-url">${escapeHtml(l.url)}</div>
+          <div class="colp-actions">
+            <button class="btn btn-ghost btn-sm" data-colp-remove>Remove</button>
+            <button class="btn btn-primary btn-sm" data-colp-open>Open link</button>
           </div>
         </div>`,
+      remove: () => { p.links = p.links.filter((x) => x.id !== lid); },
     };
   }
   if (kind === "t") {
@@ -1960,13 +1890,16 @@ function colNode(key) {
       open: () => openSpaceTab(ref, "notes"),
       preview: () => `
         <div class="colp">
-          <div class="colp-kicker">Note · ${escapeHtml(p.name)}</div>
-          <div class="colp-note">${noteBodyHtml(n.text)}</div>
-          <div class="colp-facts"><span>${noteStampHtml(n)}</span></div>
-          <div class="colp-thread-head">Thread</div>
+          <div class="colp-kicker">Note · ${escapeHtml(p.name)} · ${noteStampHtml(n)}</div>
+          <div class="colp-note">${noteBodyHtml(n.text) || '<span class="colp-dim">Empty note</span>'}</div>
+          <div class="colp-thread-head">Thread${n.thread && n.thread.length ? ` · ${n.thread.length}` : ""}</div>
           ${threadHtml(n)}
-          <div class="colp-actions"><button class="btn btn-primary btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button></div>
+          <div class="colp-actions">
+            <button class="btn btn-ghost btn-sm" data-colp-edit>Edit note</button>
+            <button class="btn btn-primary btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button>
+          </div>
         </div>`,
+      edit: () => openNoteSheet({ ref, note: n }),
     };
   }
   if (kind === "c") {
@@ -2145,22 +2078,20 @@ function columnsHtml() {
   const keys = ["root", ...colPath];
   while (node && node.sections) {
     const sel = colPath[depth];
-    const body = node.sections.filter((s) => s.keys.length).map((s) => `
-      ${s.title ? `<div class="col-section">${escapeHtml(s.title)}</div>` : ""}
+    const body = node.sections.map((s, si) => (s.keys.length || s.action) ? `
+      ${s.title || s.action ? `<div class="col-section">
+        <span>${escapeHtml(s.title || "")}</span>
+        ${s.action ? `<button class="col-add" data-col-action="${escapeHtml(keys[depth])}|${si}">${ICONS.plus}<span>${escapeHtml(s.action.label)}</span></button>` : ""}
+      </div>` : ""}
       ${s.keys.map((k) => colRowHtml(k, k === sel, depth)).join("")}
-    `).join("");
+      ${!s.keys.length && s.empty ? `<div class="col-hint">${escapeHtml(s.empty)}</div>` : ""}
+    ` : "").join("");
     cols.push(`
       <div class="col ${depth === colPath.length - 1 ? "col-active" : ""}" data-col="${depth}" role="listbox" aria-label="${escapeHtml(node.title || "")}">
         <div class="col-head"><span>${escapeHtml(node.title || "")}</span>
           ${depth > 0 && node.open ? `<button class="col-head-open" data-col-open="${escapeHtml(keys[depth])}" title="Open">Open ${CHEVRON_R}</button>` : ""}
         </div>
-        <div class="col-body">
-          ${node.compose ? `<div class="col-compose" data-col-compose="${escapeHtml(keys[depth])}" data-depth="${depth}">
-            <span class="col-compose-plus">+</span>
-            <textarea rows="1" data-compose-input placeholder="${escapeHtml(node.compose.placeholder)}" aria-label="${escapeHtml(node.compose.placeholder)}"></textarea>
-          </div>` : ""}
-          ${body || (node.compose ? "" : `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`)}
-        </div>
+        <div class="col-body">${body.trim() ? body : `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`}</div>
       </div>`);
     if (!sel) break;
     const next = colNode(sel);
@@ -2259,28 +2190,22 @@ function wireColumns() {
     b.addEventListener("click", () => lastNode && lastNode.open && lastNode.open()));
   root.querySelectorAll("[data-col-open]").forEach((b) =>
     b.addEventListener("click", () => { const n = colNode(b.dataset.colOpen); if (n && n.open) n.open(); }));
-  root.querySelectorAll("[data-col-compose]").forEach((box) => {
-    const node = colNode(box.dataset.colCompose);
-    const ta = box.querySelector("[data-compose-input]");
-    ta.addEventListener("input", () => autoGrow(ta));
-    ta.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Escape") { ta.value = ""; ta.blur(); return; }
-      if (e.key !== "Enter" || e.isComposing) return;
-      if (node.compose.multiline && e.shiftKey) return;
-      e.preventDefault();
-      const text = ta.value.trim();
-      if (!text) return;
-      const newKey = node.compose.add(text);
+  root.querySelectorAll("[data-col-action]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const [key, si] = b.dataset.colAction.split("|");
+    const n = colNode(key);
+    const act = n && n.sections[+si] && n.sections[+si].action;
+    if (act) act.run();
+  }));
+  root.querySelector("[data-colp-edit]")?.addEventListener("click", () => lastNode && lastNode.edit && lastNode.edit());
+  root.querySelector("[data-colp-remove]")?.addEventListener("click", () => {
+    if (!lastNode || !lastNode.remove) return;
+    showConfirm({ title: "Remove link?", message: "It comes off this space." }, () => {
+      lastNode.remove();
       persist();
-      const depth = +box.dataset.depth;
-      // tasks: stay in the box to keep adding; notes: open the new note
-      if (node.compose.multiline) { colSelect(depth + 1, newKey); return; }
-      colPath = colPath.slice(0, depth + 1);
+      colPath = colPath.slice(0, -1);
       saveColPath();
-      redrawColumns();
-      const again = app.querySelector(`[data-col-compose="${CSS.escape(box.dataset.colCompose)}"] [data-compose-input]`);
-      if (again) again.focus();
+      redrawColumns(colPath[colPath.length - 1]);
     });
   });
   if (lastNode && lastNode.note) {
@@ -2396,6 +2321,209 @@ function wireThread(el, note, onChange) {
       persist();
       redraw(false);
     });
+  }));
+}
+
+/* ---------- add / edit sheets used by the columns ----------
+   one calm modal per thing you create: a goal, a task, a note, a link */
+
+function sheetOpen({ kicker, title, body, primary, more }) {
+  if (app.querySelector(".window-backdrop")) return null;
+  const backdrop = document.createElement("div");
+  backdrop.className = "window-backdrop";
+  backdrop.innerHTML = `
+    <div class="new-form sheet" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+      ${kicker ? `<div class="sheet-kicker">${kicker}</div>` : ""}
+      <h3>${escapeHtml(title)}</h3>
+      ${body}
+      <div class="sheet-foot">
+        ${more ? `<label class="sheet-more"><input type="checkbox" data-sheet-more /> <span>Add another</span></label>` : ""}
+        <span class="sheet-flash" data-sheet-flash></span>
+        <button class="btn btn-ghost" data-sheet-cancel>Cancel</button>
+        <button class="btn btn-primary" data-sheet-ok>${escapeHtml(primary)}</button>
+      </div>
+    </div>`;
+  app.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.querySelector("[data-sheet-cancel]").addEventListener("click", close);
+  backdrop.addEventListener("pointerdown", (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  return { el: backdrop, close };
+}
+
+/* path to a space as it is open in the columns, then whatever comes after */
+function colRevealPath(ref, tail) {
+  const i = colPath.indexOf("p:" + ref);
+  let base;
+  if (i >= 0) base = colPath.slice(0, i + 1);
+  else {
+    const parts = ref.split("~");
+    base = parts.map((_, j) => "p:" + parts.slice(0, j + 1).join("~"));
+  }
+  colPath = [...base, ...tail];
+  saveColPath();
+  redrawColumns(tail[tail.length - 1]);
+}
+
+function openItemSheet({ ref, kind, goalId = "" }) {
+  const p = containerByRef(ref);
+  if (!p) return;
+  const isGoal = kind === "goal";
+  const goal = goalId && p.goals.find((g) => g.id === goalId);
+  const goalOpts = p.goals.filter((g) => !g.done || g.id === goalId);
+  let tag = null;
+  const body = `
+    <textarea class="sheet-text" rows="2" data-sheet-text placeholder="${isGoal ? "What do you want to achieve?" : "What needs doing?"}"></textarea>
+    <div class="sheet-grid">
+      ${isGoal ? "" : `
+      <label class="sheet-field sheet-field-wide"><span>Under</span>
+        <select data-sheet-goal>
+          ${goalOpts.map((g) => `<option value="${g.id}" ${g.id === goalId ? "selected" : ""}>${escapeHtml(g.text)}</option>`).join("")}
+          <option value="" ${goalId ? "" : "selected"}>Others</option>
+        </select>
+      </label>`}
+      <label class="sheet-field"><span>Owner</span>
+        <select data-sheet-owner>
+          <option value="">Me</option>
+          ${state.people.slice().sort((a, b) => a.name.localeCompare(b.name)).map((per) => `<option value="${per.id}">${escapeHtml(per.name)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="sheet-field"><span>Due</span><input type="date" data-sheet-due /></label>
+    </div>
+    ${isGoal ? "" : `
+    <div class="sheet-tags"><span>List</span>
+      ${Object.keys(WIDGETS).map((t) => `<button type="button" class="tag-btn" data-sheet-tag="${t}" style="--wt:${WIDGETS[t].tint}" title="${WIDGETS[t].label}" aria-pressed="false">${WIDGETS[t].icon}</button>`).join("")}
+    </div>`}`;
+  const sheet = sheetOpen({
+    kicker: escapeHtml(p.name) + (goal ? " › " + escapeHtml(goal.text) : !isGoal && !goalId ? " › Others" : ""),
+    title: isGoal ? "New goal" : goal ? "New subtask" : "New task",
+    body, primary: isGoal ? "Add goal" : "Add", more: true,
+  });
+  if (!sheet) return;
+  const $ = (q) => sheet.el.querySelector(q);
+  const text = $("[data-sheet-text]");
+  text.focus();
+  text.addEventListener("input", () => autoGrow(text));
+  sheet.el.querySelectorAll("[data-sheet-tag]").forEach((b) => b.addEventListener("click", () => {
+    tag = tag === b.dataset.sheetTag ? null : b.dataset.sheetTag;
+    sheet.el.querySelectorAll("[data-sheet-tag]").forEach((x) => {
+      x.classList.toggle("active", x.dataset.sheetTag === tag);
+      x.setAttribute("aria-pressed", x.dataset.sheetTag === tag);
+    });
+  }));
+
+  function submit() {
+    const t = text.value.trim();
+    if (!t) { text.focus(); return; }
+    const item = { id: uid(), text: t, done: false, createdAt: new Date().toISOString() };
+    const owner = $("[data-sheet-owner]").value;
+    const due = $("[data-sheet-due]").value;
+    if (owner) item.owner = owner;
+    if (due) item.due = due;
+    let parentKey;
+    if (isGoal) {
+      p.goals.push(item);
+    } else {
+      const gid = $("[data-sheet-goal]").value;
+      if (gid) item.goalId = gid;
+      if (tag) item.tag = tag;
+      p.tasks.push(item);
+      parentKey = gid ? "g:" + ref + ":" + gid : "o:" + ref;
+    }
+    persist();
+    if ($("[data-sheet-more]").checked) {
+      // keep the sheet; refresh the list behind it
+      text.value = ""; autoGrow(text); text.focus();
+      const flash = $("[data-sheet-flash]");
+      flash.textContent = "Added";
+      flash.classList.remove("on"); void flash.offsetWidth; flash.classList.add("on");
+      colRevealPath(ref, isGoal ? [] : [parentKey]);
+      return;
+    }
+    sheet.close();
+    colRevealPath(ref, isGoal ? ["g:" + ref + ":" + item.id] : [parentKey, "t:" + ref + ":" + item.id]);
+  }
+  $("[data-sheet-ok]").addEventListener("click", submit);
+  text.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
+  });
+}
+
+function openNoteSheet({ ref, note = null }) {
+  const p = containerByRef(ref);
+  if (!p) return;
+  const sheet = sheetOpen({
+    kicker: escapeHtml(p.name) + " › Notes",
+    title: note ? "Edit note" : "New note",
+    body: `
+      <div class="sheet-note">
+        <div class="sheet-note-tools">
+          <button type="button" class="fmt-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+          <button type="button" class="fmt-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+          <button type="button" class="fmt-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+          <button type="button" class="fmt-btn" data-cmd="insertUnorderedList" title="Bullet list">&bull; List</button>
+          <button type="button" class="fmt-btn" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+        </div>
+        <div class="sheet-note-text" contenteditable="true" data-sheet-note data-ph="Write your note…">${note ? noteBodyHtml(note.text) : ""}</div>
+      </div>
+      <div class="sheet-hint">⌘ Enter to save</div>`,
+    primary: note ? "Save" : "Add note",
+  });
+  if (!sheet) return;
+  sheet.el.querySelector(".sheet").classList.add("sheet-wide");
+  const ed = sheet.el.querySelector("[data-sheet-note]");
+  ed.focus();
+  sheet.el.querySelectorAll("[data-cmd]").forEach((b) => b.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    document.execCommand(b.dataset.cmd, false, null);
+  }));
+  function submit() {
+    const html = ed.textContent.trim() ? ed.innerHTML : "";
+    if (!html) { ed.focus(); return; }
+    const now = new Date().toISOString();
+    let n = note;
+    if (n) { n.text = html; n.updatedAt = now; }
+    else { n = { id: uid(), text: html, createdAt: now, updatedAt: now }; p.notesList.unshift(n); }
+    persist();
+    sheet.close();
+    colRevealPath(ref, ["n:" + ref + ":" + n.id]);
+  }
+  sheet.el.querySelector("[data-sheet-ok]").addEventListener("click", submit);
+  ed.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
+  });
+}
+
+function openLinkSheet({ ref }) {
+  const p = containerByRef(ref);
+  if (!p) return;
+  const sheet = sheetOpen({
+    kicker: escapeHtml(p.name) + " › Links",
+    title: "Add link",
+    body: `
+      <input type="text" data-sheet-url placeholder="Paste a URL (e.g. docs.google.com/…)" inputmode="url" autocomplete="off" />
+      <input type="text" data-sheet-name placeholder="Name (optional)" maxlength="80" />`,
+    primary: "Add link",
+  });
+  if (!sheet) return;
+  const url = sheet.el.querySelector("[data-sheet-url]");
+  const name = sheet.el.querySelector("[data-sheet-name]");
+  url.focus();
+  function submit() {
+    let u = url.value.trim();
+    if (!u) { url.focus(); return; }
+    if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+    let host = "";
+    try { host = new URL(u).hostname.replace(/^www\./, ""); } catch { url.focus(); return; }
+    const l = { id: uid(), url: u, name: name.value.trim() || host };
+    p.links.push(l);
+    persist();
+    sheet.close();
+    colRevealPath(ref, ["pl:" + ref + ":" + l.id]);
+  }
+  sheet.el.querySelector("[data-sheet-ok]").addEventListener("click", submit);
+  [url, name].forEach((i) => i.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); submit(); }
   }));
 }
 
