@@ -1808,7 +1808,15 @@ function colNode(key) {
           action: { label: "Add goal", run: () => openItemSheet({ ref: rest, kind: "goal" }) } },
         { title: "Notes", keys: p.notesList.map((n) => "n:" + rest + ":" + n.id),
           empty: "No notes yet",
-          action: { label: "New note", run: () => openNoteSheet({ ref: rest }) } },
+          action: { label: "New note", run: () => {
+            const now = new Date().toISOString();
+            const n = { id: uid(), text: "", createdAt: now, updatedAt: now, thread: [] };
+            p.notesList.unshift(n);
+            persist();
+            colRevealPath(rest, ["n:" + rest + ":" + n.id]);
+            const ed = app.querySelector('.col-preview [data-nsec="root"] .note-card-text');
+            if (ed) ed.focus();
+          } } },
         { title: "Links", keys: p.links.map((l) => "pl:" + rest + ":" + l.id),
           empty: "No links yet",
           action: { label: "Add link", run: () => openLinkSheet({ ref: rest }) } },
@@ -1883,23 +1891,20 @@ function colNode(key) {
     if (!n) return null;
     const text = plainText(n.text);
     return {
-      label: text.slice(0, 160) || "Empty note",
+      label: text.slice(0, 160) || "New note",
       note: n,
       icon: `<span class="col-glyph">${COL_ICONS.note}</span>`,
-      meta: (n.thread && n.thread.length ? `<span class="col-thread">${n.thread.length} ${n.thread.length === 1 ? "reply" : "replies"}</span>` : "") + shortDay(n.updatedAt || n.createdAt),
+      meta: (n.thread && n.thread.length ? `<span class="col-thread">+${n.thread.length}</span>` : "") + shortDay(n.updatedAt || n.createdAt),
       open: () => openSpaceTab(ref, "notes"),
       preview: () => `
         <div class="colp">
-          <div class="colp-kicker">Note · ${escapeHtml(p.name)} · ${noteStampHtml(n)}</div>
-          <div class="colp-note">${noteBodyHtml(n.text) || '<span class="colp-dim">Empty note</span>'}</div>
-          <div class="colp-thread-head">Thread${n.thread && n.thread.length ? ` · ${n.thread.length}` : ""}</div>
-          ${threadHtml(n)}
+          <div class="colp-kicker">Note · ${escapeHtml(p.name)}</div>
+          ${noteFeedHtml(n)}
           <div class="colp-actions">
-            <button class="btn btn-ghost btn-sm" data-colp-edit>Edit note</button>
-            <button class="btn btn-primary btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button>
+            <button class="btn btn-ghost btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button>
           </div>
         </div>`,
-      edit: () => openNoteSheet({ ref, note: n }),
+      removeNote: () => { p.notesList = p.notesList.filter((x) => x.id !== nid); },
     };
   }
   if (kind === "c") {
@@ -2197,7 +2202,6 @@ function wireColumns() {
     const act = n && n.sections[+si] && n.sections[+si].action;
     if (act) act.run();
   }));
-  root.querySelector("[data-colp-edit]")?.addEventListener("click", () => lastNode && lastNode.edit && lastNode.edit());
   root.querySelector("[data-colp-remove]")?.addEventListener("click", () => {
     if (!lastNode || !lastNode.remove) return;
     showConfirm({ title: "Remove link?", message: "It comes off this space." }, () => {
@@ -2209,9 +2213,37 @@ function wireColumns() {
     });
   });
   if (lastNode && lastNode.note) {
-    wireThread(root.querySelector(".col-preview [data-thread]"), lastNode.note, () => {
-      const row = root.querySelector(`[data-col-key="${CSS.escape(last)}"] .col-meta`);
-      if (row) row.innerHTML = colNode(last).meta;
+    const note = lastNode.note;
+    const refresh = () => {
+      const row = root.querySelector(`[data-col-key="${CSS.escape(last)}"]`);
+      const n = colNode(last);
+      if (!row || !n) return;
+      row.querySelector(".col-label").textContent = n.label;
+      const meta = row.querySelector(".col-meta");
+      if (meta) meta.innerHTML = n.meta;
+    };
+    wireNoteFeed(root.querySelector(".col-preview [data-nfeed]"), note, {
+      onChange: refresh,
+      onRootDelete: () => showConfirm({ title: "Delete note?", message: "The note and everything added to it will be removed." }, () => {
+        lastNode.removeNote();
+        persist();
+        colPath = colPath.slice(0, -1);
+        saveColPath();
+        redrawColumns(colPath[colPath.length - 1]);
+      }),
+    });
+    // a brand-new note left completely empty doesn't linger
+    const rootEd = root.querySelector('.col-preview [data-nsec="root"] .note-card-text');
+    rootEd?.addEventListener("blur", () => setTimeout(() => {
+      if (!document.body.contains(rootEd)) return;
+      if (!note.text && !(note.thread || []).length && !root.querySelector(".col-preview").contains(document.activeElement)) {
+        lastNode.removeNote();
+        persist();
+      }
+    }, 0));
+    rootEd?.addEventListener("input", () => {
+      const row = root.querySelector(`[data-col-key="${CSS.escape(last)}"] .col-label`);
+      if (row) row.textContent = plainText(rootEd.innerHTML).slice(0, 160) || "New note";
     });
   }
   root.querySelector("[data-colp-toggle]")?.addEventListener("click", () => colToggleTask(last));
@@ -2254,74 +2286,124 @@ document.addEventListener("keydown", (e) => {
 });
 
 
-/* ---------- note threads: running replies under any note ----------
-   note.thread = [{ id, text, createdAt }], oldest first */
+/* ---------- note threads: a note grows section by section ----------
+   note.thread = [{ id, text(html), createdAt, updatedAt }], oldest first.
+   Shown newest first under an "Add" button at the top, the way the
+   Notes feed always worked: click, a fresh section appears, type. */
 
-function threadEntryHtml(e) {
+const NOTE_TOOLS = `
+  <div class="note-tools-mini">
+    <button class="fmt-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+    <button class="fmt-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+    <button class="fmt-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+    <button class="fmt-btn" data-cmd="insertUnorderedList" title="Bullet list">&bull; List</button>
+  </div>`;
+
+function noteSectionHtml(entry, isRoot) {
   return `
-    <div class="thread-entry" data-entry="${e.id}">
-      <div class="thread-text">${escapeHtml(e.text).replace(/\n/g, "<br>")}</div>
-      <div class="thread-foot">
-        <span>${escapeHtml(fmtDT(e.createdAt))}</span>
-        <button class="thread-del" data-thread-del="${e.id}" title="Delete" aria-label="Delete">&times;</button>
+    <div class="note-card nsec ${isRoot ? "nsec-root" : ""}" data-nsec="${isRoot ? "root" : entry.id}">
+      <div class="note-card-text" contenteditable="true" data-ph="${isRoot ? "Write..." : "Add to this note..."}">${noteBodyHtml(entry.text)}</div>
+      <div class="note-card-foot">
+        ${NOTE_TOOLS}
+        <span class="note-date">${isRoot ? "" : `<span class="nsec-tag">Update</span>`}${noteStampHtml(entry)}</span>
+        <button class="action-btn item-delete" data-nsec-del title="${isRoot ? "Delete note" : "Delete section"}">&times;</button>
       </div>
     </div>`;
 }
 
+/* full feed for the columns preview: add button, newest section first, the note itself last */
+function noteFeedHtml(note) {
+  const list = note.thread || [];
+  return `
+    <div class="nfeed" data-nfeed>
+      <button class="crow crow-add note-add" data-nfeed-add>+ Add to this note</button>
+      ${list.slice().reverse().map((e) => noteSectionHtml(e, false)).join("")}
+      ${noteSectionHtml(note, true)}
+    </div>`;
+}
+
+/* compact thread inside a Notes-tab card: the card itself is the note */
 function threadHtml(note) {
   const list = note.thread || [];
   return `
-    <div class="thread ${list.length ? "has-entries" : ""}" data-thread>
-      ${list.length ? `<div class="thread-list">${list.map(threadEntryHtml).join("")}</div>` : ""}
-      <div class="thread-compose">
-        <textarea rows="1" data-thread-input placeholder="${list.length ? "Add to the thread…" : "Start a thread…"}" aria-label="Add to the thread"></textarea>
-        <button class="thread-post" data-thread-post aria-label="Post" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
-        </button>
-      </div>
+    <div class="nthread" data-nfeed>
+      <button class="nthread-add" data-nfeed-add>+ Add to this note</button>
+      ${list.slice().reverse().map((e) => noteSectionHtml(e, false)).join("")}
     </div>`;
+}
+
+/* wires a [data-nfeed]. opts: onRootDelete(), onChange() */
+function wireNoteFeed(feed, note, opts = {}) {
+  if (!feed) return;
+  if (!note.thread) note.thread = [];
+
+  function wireSection(card) {
+    const isRoot = card.dataset.nsec === "root";
+    const entry = isRoot ? note : note.thread.find((e) => e.id === card.dataset.nsec);
+    if (!entry) return;
+    const ed = card.querySelector(".note-card-text");
+    const save = () => {
+      const next = ed.textContent.trim() ? ed.innerHTML : "";
+      if (next === (entry.text || "")) return;
+      entry.text = next;
+      entry.updatedAt = new Date().toISOString();
+      if (!isRoot) note.updatedAt = entry.updatedAt;
+      persist();
+      const stamp = card.querySelector(".note-date");
+      if (stamp) stamp.innerHTML = (isRoot ? "" : `<span class="nsec-tag">Update</span>`) + noteStampHtml(entry);
+      if (opts.onChange) opts.onChange();
+    };
+    let timer = null;
+    ed.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(save, 500); });
+    ed.addEventListener("keydown", (e) => e.stopPropagation());
+    ed.addEventListener("blur", () => {
+      clearTimeout(timer);
+      save();
+      // an update left empty simply disappears
+      if (!isRoot && !ed.textContent.trim()) {
+        note.thread = note.thread.filter((x) => x.id !== entry.id);
+        persist();
+        card.remove();
+        if (opts.onChange) opts.onChange();
+      }
+    });
+    card.querySelectorAll("[data-cmd]").forEach((b) => b.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      document.execCommand(b.dataset.cmd, false, null);
+      save();
+    }));
+    card.querySelector("[data-nsec-del]").addEventListener("click", () => {
+      if (isRoot) { if (opts.onRootDelete) opts.onRootDelete(); return; }
+      if (!ed.textContent.trim()) {
+        note.thread = note.thread.filter((x) => x.id !== entry.id);
+        persist(); card.remove(); return;
+      }
+      showConfirm({ title: "Delete section?", message: "This removes it from the note." }, () => {
+        note.thread = note.thread.filter((x) => x.id !== entry.id);
+        persist();
+        card.remove();
+        if (opts.onChange) opts.onChange();
+      });
+    });
+  }
+
+  feed.querySelectorAll(":scope > [data-nsec]").forEach(wireSection);
+  const add = feed.querySelector("[data-nfeed-add]");
+  add.addEventListener("click", () => {
+    const now = new Date().toISOString();
+    const e = { id: uid(), text: "", createdAt: now, updatedAt: now };
+    note.thread.push(e);
+    persist();
+    const card = elFromHtml(noteSectionHtml(e, false));
+    add.after(card);
+    wireSection(card);
+    card.querySelector(".note-card-text").focus();
+  });
 }
 
 function autoGrow(ta) {
   ta.style.height = "auto";
   ta.style.height = Math.min(ta.scrollHeight, 220) + "px";
-}
-
-/* wires a [data-thread] element in place; onChange fires after any edit */
-function wireThread(el, note, onChange) {
-  if (!el) return;
-  const input = el.querySelector("[data-thread-input]");
-  const post = el.querySelector("[data-thread-post]");
-  const redraw = (focus) => {
-    const fresh = elFromHtml(threadHtml(note));
-    el.replaceWith(fresh);
-    wireThread(fresh, note, onChange);
-    if (focus) fresh.querySelector("[data-thread-input]").focus();
-    if (onChange) onChange();
-  };
-  const submit = () => {
-    const text = input.value.trim();
-    if (!text) return;
-    if (!note.thread) note.thread = [];
-    note.thread.push({ id: uid(), text, createdAt: new Date().toISOString() });
-    note.updatedAt = new Date().toISOString();
-    persist();
-    redraw(true);
-  };
-  input.addEventListener("input", () => { autoGrow(input); post.disabled = !input.value.trim(); });
-  input.addEventListener("keydown", (e) => {
-    e.stopPropagation();
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
-  });
-  post.addEventListener("pointerdown", (e) => e.preventDefault());
-  post.addEventListener("click", submit);
-  el.querySelectorAll("[data-thread-del]").forEach((b) => b.addEventListener("click", () => {
-    showConfirm({ title: "Delete reply?", message: "This removes it from the thread." }, () => {
-      note.thread = (note.thread || []).filter((x) => x.id !== b.dataset.threadDel);
-      persist();
-      redraw(false);
-    });
-  }));
 }
 
 /* ---------- add / edit sheets used by the columns ----------
@@ -2446,51 +2528,6 @@ function openItemSheet({ ref, kind, goalId = "" }) {
   $("[data-sheet-ok]").addEventListener("click", submit);
   text.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
-  });
-}
-
-function openNoteSheet({ ref, note = null }) {
-  const p = containerByRef(ref);
-  if (!p) return;
-  const sheet = sheetOpen({
-    kicker: escapeHtml(p.name) + " › Notes",
-    title: note ? "Edit note" : "New note",
-    body: `
-      <div class="sheet-note">
-        <div class="sheet-note-tools">
-          <button type="button" class="fmt-btn" data-cmd="bold" title="Bold"><b>B</b></button>
-          <button type="button" class="fmt-btn" data-cmd="italic" title="Italic"><i>I</i></button>
-          <button type="button" class="fmt-btn" data-cmd="underline" title="Underline"><u>U</u></button>
-          <button type="button" class="fmt-btn" data-cmd="insertUnorderedList" title="Bullet list">&bull; List</button>
-          <button type="button" class="fmt-btn" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
-        </div>
-        <div class="sheet-note-text" contenteditable="true" data-sheet-note data-ph="Write your note…">${note ? noteBodyHtml(note.text) : ""}</div>
-      </div>
-      <div class="sheet-hint">⌘ Enter to save</div>`,
-    primary: note ? "Save" : "Add note",
-  });
-  if (!sheet) return;
-  sheet.el.querySelector(".sheet").classList.add("sheet-wide");
-  const ed = sheet.el.querySelector("[data-sheet-note]");
-  ed.focus();
-  sheet.el.querySelectorAll("[data-cmd]").forEach((b) => b.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    document.execCommand(b.dataset.cmd, false, null);
-  }));
-  function submit() {
-    const html = ed.textContent.trim() ? ed.innerHTML : "";
-    if (!html) { ed.focus(); return; }
-    const now = new Date().toISOString();
-    let n = note;
-    if (n) { n.text = html; n.updatedAt = now; }
-    else { n = { id: uid(), text: html, createdAt: now, updatedAt: now }; p.notesList.unshift(n); }
-    persist();
-    sheet.close();
-    colRevealPath(ref, ["n:" + ref + ":" + n.id]);
-  }
-  sheet.el.querySelector("[data-sheet-ok]").addEventListener("click", submit);
-  ed.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
   });
 }
 
@@ -4050,7 +4087,7 @@ function wireTabContent(id, page) {
 
     feed.querySelectorAll(".note-card").forEach((card) => {
       wireNoteCard(card);
-      wireThread(card.querySelector("[data-thread]"), p.notesList.find((n) => n.id === card.dataset.note));
+      wireNoteFeed(card.querySelector("[data-nfeed]"), p.notesList.find((n) => n.id === card.dataset.note));
     });
 
     // "+ Add a note" → a fresh card appears at the top, ready to type
@@ -4061,7 +4098,7 @@ function wireTabContent(id, page) {
       const card = elFromHtml(noteCardHtml(n));
       feed.prepend(card);
       wireNoteCard(card);
-      wireThread(card.querySelector("[data-thread]"), n);
+      wireNoteFeed(card.querySelector("[data-nfeed]"), n);
       card.querySelector(".note-card-text").focus();
 
     });

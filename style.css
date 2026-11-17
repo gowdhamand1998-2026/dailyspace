@@ -3411,46 +3411,31 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .col-thread { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-right: 6px; border-radius: 6px; background: rgba(59,130,246,.16); color: #93b4f8; font-size: 10.5px; font-weight: 500; }
 .col-active .col-row.selected .col-thread { background: rgba(255,255,255,.2); color: #fff; }
 
-/* threads (Notes tab cards and the columns preview) */
-.thread { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); user-select: text; }
-.note-card .thread { margin: 2px -4px 6px; }
-.thread-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; padding-left: 12px; border-left: 2px solid rgba(59,130,246,.35); }
-.thread-entry { padding: 5px 0 5px 2px; }
-.thread-text { font-size: 13.5px; line-height: 1.55; color: var(--text); white-space: normal; overflow-wrap: anywhere; }
-.thread-foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 11px; color: var(--text-3); }
-.thread-del { opacity: 0; width: 18px; height: 18px; border-radius: 5px; font-size: 14px; line-height: 1; color: var(--text-3); }
-.thread-entry:hover .thread-del, .thread-del:focus-visible { opacity: 1; }
-.thread-del:hover { color: #f87171; background: rgba(248,113,113,.1); }
-.thread-compose {
-  display: flex; align-items: flex-end; gap: 8px;
-  padding: 6px 6px 6px 12px; border-radius: 10px;
-  background: rgba(255,255,255,.04); border: 1px solid transparent;
-  transition: border-color .15s, background .15s;
+/* a note grows section by section (columns preview + Notes tab) */
+.nfeed { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.nfeed .note-add { margin: 0; }
+.colp:has(.nfeed) { max-width: 720px; }
+.nsec { padding: 14px 18px 6px; }
+.nsec-root { border-color: var(--line-strong); }
+.nsec .note-card-text { font-size: 14px; line-height: 1.65; user-select: text; }
+.nsec-tag {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-right: 8px;
+  border-radius: 6px; background: rgba(59,130,246,.14); color: #93b4f8;
+  font-size: 10.5px; font-weight: 500; vertical-align: 1px;
 }
-.thread-compose:focus-within { border-color: var(--line-strong); background: rgba(255,255,255,.06); }
-.thread-compose textarea {
-  flex: 1; min-width: 0; resize: none; border: none; outline: none; background: none;
-  color: var(--text); font: inherit; font-size: 13.5px; line-height: 20px; padding: 3px 0; max-height: 220px;
+.nthread { display: flex; flex-direction: column; gap: 8px; margin: 6px -8px 8px; }
+.nthread .nsec { background: rgba(255,255,255,.03); border-radius: 12px; padding: 10px 14px 4px; }
+.nthread-add {
+  align-self: flex-start; height: 26px; padding: 0 10px; border-radius: 8px;
+  font-size: 12px; color: var(--text-3); border: 1px dashed var(--line-strong);
+  transition: color .15s, border-color .15s;
 }
-.thread-compose textarea::placeholder { color: var(--text-3); }
-.thread-post {
-  flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--select); color: #fff; transition: opacity .15s, transform .1s;
-}
-.thread-post svg { width: 14px; height: 14px; }
-.thread-post:disabled { opacity: .25; cursor: default; }
-.thread-post:not(:disabled):active { transform: scale(.92); }
-.colp-thread-head { margin-top: 22px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
-.colp .thread { border-top: none; padding-top: 8px; }
-
+.nthread-add:hover { color: var(--text); border-color: var(--text-2); }
 @media (max-width: 700px) {
   .cols-scroll > .col, .cols-scroll > .col-preview { max-width: none; flex: 1 1 auto; }
   .col-label { -webkit-line-clamp: unset; display: block; }
-  .thread-compose textarea, .sheet textarea, .sheet input, .sheet select, .sheet-note-text { font-size: 16px; } /* no iOS zoom */
+  .sheet textarea, .sheet input, .sheet select, .sheet-note-text { font-size: 16px; } /* no iOS zoom */
   .col-add { height: 30px; padding: 0 10px 0 8px; font-size: 13px; }
-  .thread-del { opacity: 1; }
-  .thread-post { width: 32px; height: 32px; }
 }
 
 .cols-scroll > .col[data-col="1"] { flex-basis: 340px; }
