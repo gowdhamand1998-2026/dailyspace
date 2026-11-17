@@ -1276,9 +1276,12 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
     .join("");
 
   app.innerHTML = `
-    <div class="desktop" data-desktop>
+    <div class="desktop view-${homeView()}" data-desktop>
       <div class="menubar">
-        <span class="wordmark">Daily<em>Space</em></span>
+        <div class="menubar-left">
+          <span class="wordmark">Daily<em>Space</em></span>
+          ${viewSwitchHtml()}
+        </div>
         <div class="menubar-right">
           <button class="sync-chip" id="sync-chip" data-sync data-state="${cloud.status}">${syncChipHtml()}</button>
           <span class="menu-sep"></span>
@@ -1309,7 +1312,8 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
         <span class="timebar-label" id="tb-label">${Math.round(timeProgress(state.period).pct)}% · ${timeProgress(state.period).left}</span>
       </div>`}
 
-      <div class="desktop-items ${state.timebarHidden ? "" : "with-timebar"}" data-items>
+      ${homeView() === "columns" ? columnsHtml() : ""}
+      <div class="desktop-items ${state.timebarHidden ? "" : "with-timebar"}" data-items ${homeView() === "columns" ? "hidden" : ""}>
       ${icons}
       ${widgets}
       ${state.collections.filter((c) => !isArchived("collection", c.id)).map((c) => `
@@ -1340,7 +1344,7 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
         </div>`).join("")}
       </div>
 
-      ${state.projects.length ? "" : `<div class="desktop-hint">Your desktop is empty — press + in the dock to create a project</div>`}
+      ${state.projects.length || homeView() === "columns" ? "" : `<div class="desktop-hint">Your desktop is empty — press + in the dock to create a project</div>`}
 
       ${IS_MOBILE || !TODAY_ENABLED ? "" : todayPanelHtml()}
 
@@ -1449,6 +1453,13 @@ function wireDesktop() {
     desktop.addEventListener("pointerdown", (e) => {
       if (!e.target.closest("[data-fab-wrap], [data-dock-apps]")) fabWrap.classList.remove("open");
     });
+  }
+
+  wireViewSwitch();
+  if (homeView() === "columns") {
+    wireColumns();
+    const sc = app.querySelector("[data-cols-scroll]");
+    if (sc) sc.scrollLeft = sc.scrollWidth;
   }
 
   // dock
@@ -1700,6 +1711,568 @@ function showAddChooser() {
   backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
   backdrop.querySelector("#ch-project").focus();
 }
+
+/* ---------- home views: Desktop (icons) or Columns (Finder-style) ----------
+   The view lives in state.homeView and syncs; the open path in the columns
+   is a per-device convenience kept in localStorage. */
+
+const HOME_VIEWS = [
+  { key: "desktop", label: "Desktop", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg>' },
+  { key: "columns", label: "Columns", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M15 4v16"/></svg>' },
+];
+const CHEVRON_R = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+const COL_ICONS = {
+  goal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>',
+  stack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h9"/></svg>',
+  note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h9l3.5 3.5v13.5H6z"/><path d="M9 11h6M9 15h6"/></svg>',
+  links: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+};
+
+function homeView() { return state.homeView === "columns" ? "columns" : "desktop"; }
+
+function viewSwitchHtml() {
+  const cur = HOME_VIEWS.find((v) => v.key === homeView());
+  return `
+    <div class="view-switch" data-view-switch>
+      <button class="view-btn" data-view-btn aria-haspopup="menu" aria-expanded="false">
+        ${cur.icon}<span>${cur.label}</span>
+        <svg class="view-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="view-menu" role="menu">
+        <div class="view-menu-label">View as</div>
+        ${HOME_VIEWS.map((v) => `
+          <button class="view-opt ${v.key === cur.key ? "active" : ""}" data-view="${v.key}" role="menuitemradio" aria-checked="${v.key === cur.key}">
+            ${v.icon}<span>${v.label}</span>
+            <svg class="view-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+          </button>`).join("")}
+      </div>
+    </div>`;
+}
+
+function wireViewSwitch() {
+  const wrap = app.querySelector("[data-view-switch]");
+  if (!wrap) return;
+  const btn = wrap.querySelector("[data-view-btn]");
+  const setOpen = (on) => { wrap.classList.toggle("open", on); btn.setAttribute("aria-expanded", on); };
+  btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!wrap.classList.contains("open")); });
+  wrap.querySelectorAll("[data-view]").forEach((o) => o.addEventListener("click", () => {
+    setOpen(false);
+    if (o.dataset.view === homeView()) return;
+    state.homeView = o.dataset.view;
+    persist();
+    renderDesktop(null);
+  }));
+  document.addEventListener("pointerdown", function off(e) {
+    if (!document.body.contains(wrap)) { document.removeEventListener("pointerdown", off); return; }
+    if (!wrap.contains(e.target)) setOpen(false);
+  });
+}
+
+/* ---- the column tree ----
+   keys: root · p:<ref> · g:<ref>:<goalId> · o:<ref> (Others) · nl:<ref> (Notes)
+         lk:<ref> (space links) · t:<ref>:<taskId> · n:<ref>:<noteId>
+         c:<collectionId> · l:<linkId> · w:<widget> · people · per:<personId> */
+
+let colPath = (() => {
+  try { return JSON.parse(localStorage.getItem("dailyspace-colpath") || "[]"); } catch { return []; }
+})();
+function saveColPath() {
+  try { localStorage.setItem("dailyspace-colpath", JSON.stringify(colPath)); } catch {}
+}
+
+function colSplit(key) {
+  const i = key.indexOf(":");
+  return i < 0 ? [key, ""] : [key.slice(0, i), key.slice(i + 1)];
+}
+
+function plainText(html) {
+  const d = document.createElement("div");
+  d.innerHTML = html || "";
+  return (d.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function spaceStats(p) {
+  const open = p.tasks.filter((t) => !t.done);
+  return {
+    open: open.length,
+    over: open.filter((t) => t.due && dueDelta(t.due) < 0).length,
+    goals: p.goals.filter((g) => !g.done).length,
+    notes: p.notesList.length,
+    subs: p.tracker ? p.tracker.items.filter((c) => c.stage !== "closed").length : 0,
+  };
+}
+
+/* every task in every open space (sub-projects included), with its ref */
+function allTaskRefs() {
+  const out = [];
+  allSpaces().forEach((s) => s.node.tasks.forEach((t) => out.push({ task: t, ref: s.ref, space: s })));
+  return out;
+}
+
+function colTaskSort(a, b) {
+  if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+  return (a.due || "9999").localeCompare(b.due || "9999");
+}
+
+/* a node knows how to draw its row, list its children, or preview itself */
+function colNode(key) {
+  const [kind, rest] = colSplit(key);
+  if (kind === "root") {
+    const spaces = state.projects.filter((p) => onDesktop("project", p.id));
+    const cols = state.collections.filter((c) => !isArchived("collection", c.id));
+    const links = state.links.filter((l) => onDesktop("link", l.id));
+    return {
+      title: "DailySpace",
+      sections: [
+        { title: "Spaces", keys: spaces.map((p) => "p:" + p.id) },
+        { title: "Collections", keys: cols.map((c) => "c:" + c.id) },
+        { title: "Links", keys: links.map((l) => "l:" + l.id) },
+        { title: "Lists", keys: [...Object.keys(WIDGETS).map((k) => "w:" + k), "people"] },
+      ],
+    };
+  }
+  if (kind === "p") {
+    const p = containerByRef(rest);
+    if (!p) return null;
+    const isSub = rest.includes("~");
+    const accent = isSub ? kcolor(p.name) : accentFor(rest);
+    const st = spaceStats(p);
+    const subs = p.tracker ? p.tracker.items.filter((c) => c.stage !== "closed") : [];
+    const loose = looseTasks(p);
+    return {
+      title: p.name,
+      label: p.name,
+      icon: `<span class="col-tile" style="--pa:${accent}">${escapeHtml(initials(p.name))}</span>`,
+      meta: st.over ? `<span class="col-over">${st.over}</span>` : (st.open ? String(st.open) : ""),
+      folder: true,
+      open: () => (window.location.hash = "#/p/" + rest),
+      sections: [
+        { title: p.tracker ? p.tracker.name : "", keys: subs.map((c) => "p:" + rest + "~" + c.id) },
+        { title: "Goals", keys: p.goals.slice().sort(colTaskSort).map((g) => "g:" + rest + ":" + g.id) },
+        { title: "", keys: [
+          ...(loose.length || !p.goals.length ? ["o:" + rest] : []),
+          "nl:" + rest,
+          ...(p.links.length ? ["lk:" + rest] : []),
+        ] },
+      ],
+    };
+  }
+  if (kind === "g") {
+    const [ref, gid] = rest.split(":");
+    const p = containerByRef(ref);
+    const g = p && p.goals.find((x) => x.id === gid);
+    if (!g) return null;
+    const subs = p.tasks.filter((t) => t.goalId === gid).sort(colTaskSort);
+    const open = subs.filter((t) => !t.done).length;
+    return {
+      title: g.text,
+      label: g.text,
+      done: g.done,
+      icon: `<span class="col-glyph col-goal">${COL_ICONS.goal}</span>`,
+      meta: open ? String(open) : "",
+      folder: true,
+      open: () => openSpaceTab(ref, "work"),
+      emptyText: "No subtasks yet",
+      sections: [{ title: "", keys: subs.map((t) => "t:" + ref + ":" + t.id) }],
+    };
+  }
+  if (kind === "o") {
+    const p = containerByRef(rest);
+    if (!p) return null;
+    const loose = looseTasks(p).sort(colTaskSort);
+    const open = loose.filter((t) => !t.done).length;
+    return {
+      title: "Others", label: "Others",
+      icon: `<span class="col-glyph">${COL_ICONS.stack}</span>`,
+      meta: open ? String(open) : "", folder: true,
+      open: () => openSpaceTab(rest, "work"),
+      emptyText: "No loose tasks",
+      sections: [{ title: "", keys: loose.map((t) => "t:" + rest + ":" + t.id) }],
+    };
+  }
+  if (kind === "nl") {
+    const p = containerByRef(rest);
+    if (!p) return null;
+    return {
+      title: "Notes", label: "Notes",
+      icon: `<span class="col-glyph">${COL_ICONS.note}</span>`,
+      meta: p.notesList.length ? String(p.notesList.length) : "", folder: true,
+      open: () => openSpaceTab(rest, "notes"),
+      emptyText: "No notes yet",
+      sections: [{ title: "", keys: p.notesList.map((n) => "n:" + rest + ":" + n.id) }],
+    };
+  }
+  if (kind === "lk") {
+    const p = containerByRef(rest);
+    if (!p) return null;
+    return {
+      title: "Links", label: "Links",
+      icon: `<span class="col-glyph">${COL_ICONS.links}</span>`,
+      meta: String(p.links.length), folder: true,
+      open: () => openSpaceTab(rest, "links"),
+      preview: () => `
+        <div class="colp">
+          <div class="colp-kicker">Links · ${escapeHtml(p.name)}</div>
+          <div class="colp-links">
+            ${p.links.map((l) => `<a class="colp-link" href="${escapeHtml(l.url || "")}" target="_blank" rel="noopener">${escapeHtml(l.name || l.text || l.url || "Link")}<span>${escapeHtml(l.url || "")}</span></a>`).join("")}
+          </div>
+        </div>`,
+    };
+  }
+  if (kind === "t") {
+    const [ref, tid] = rest.split(":");
+    const p = containerByRef(ref);
+    const t = p && p.tasks.find((x) => x.id === tid);
+    if (!t) return null;
+    return {
+      label: t.text, task: t, ref, done: t.done,
+      open: () => openSpaceTab(ref, "work"),
+      preview: () => colTaskPreview(t, p, ref),
+    };
+  }
+  if (kind === "n") {
+    const [ref, nid] = rest.split(":");
+    const p = containerByRef(ref);
+    const n = p && p.notesList.find((x) => x.id === nid);
+    if (!n) return null;
+    const text = plainText(n.text);
+    return {
+      label: text.slice(0, 80) || "Empty note",
+      icon: `<span class="col-glyph">${COL_ICONS.note}</span>`,
+      meta: shortDay(n.updatedAt || n.createdAt),
+      open: () => openSpaceTab(ref, "notes"),
+      preview: () => `
+        <div class="colp">
+          <div class="colp-kicker">Note · ${escapeHtml(p.name)}</div>
+          <div class="colp-note">${noteBodyHtml(n.text)}</div>
+          <div class="colp-facts"><span>${noteStampHtml(n)}</span></div>
+          <div class="colp-actions"><button class="btn btn-primary btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button></div>
+        </div>`,
+    };
+  }
+  if (kind === "c") {
+    const c = state.collections.find((x) => x.id === rest);
+    if (!c) return null;
+    return {
+      title: c.name, label: c.name,
+      icon: `<span class="col-tile col-tile-coll">${collectionPreview(c)}</span>`,
+      meta: String(c.items.length), folder: true,
+      open: () => (window.location.hash = "#/c/" + c.id),
+      emptyText: "Empty collection",
+      sections: [{ title: "", keys: c.items
+        .filter((it) => it.type === "project" ? getProject(it.id) : state.links.some((l) => l.id === it.id))
+        .map((it) => (it.type === "project" ? "p:" : "l:") + it.id) }],
+    };
+  }
+  if (kind === "l") {
+    const l = state.links.find((x) => x.id === rest);
+    if (!l) return null;
+    let host = "";
+    try { host = new URL(l.url).hostname.replace(/^www\./, ""); } catch {}
+    return {
+      label: l.name,
+      icon: `<span class="col-tile col-tile-link"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>`,
+      meta: "",
+      open: () => window.open(l.url, "_blank", "noopener"),
+      preview: () => `
+        <div class="colp">
+          <div class="colp-hero"><span class="col-tile col-tile-link col-tile-lg"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span></div>
+          <div class="colp-title">${escapeHtml(l.name)}</div>
+          <div class="colp-sub">${escapeHtml(host)}</div>
+          <div class="colp-actions"><button class="btn btn-primary btn-sm" data-colp-open>Open link</button></div>
+        </div>`,
+    };
+  }
+  if (kind === "w") {
+    const w = WIDGETS[rest];
+    if (!w) return null;
+    const items = taggedTasks(rest).filter((x) => !x.task.done);
+    return {
+      title: w.label, label: w.label,
+      icon: `<span class="col-glyph col-widget" style="--wt:${w.tint}">${w.icon}</span>`,
+      meta: items.length ? String(items.length) : "", folder: true,
+      open: () => (window.location.hash = "#/w/" + rest),
+      emptyText: "Nothing here",
+      sections: [{ title: "", keys: items.map((x) => "t:" + x.project.id + ":" + x.task.id) }],
+    };
+  }
+  if (kind === "people") {
+    return {
+      title: "People", label: "People",
+      icon: `<span class="col-glyph col-widget" style="--wt:#f472b6">${ICONS.users}</span>`,
+      meta: state.people.length ? String(state.people.length) : "", folder: true,
+      open: () => (window.location.hash = "#/people"),
+      emptyText: "No people yet",
+      sections: [{ title: "", keys: state.people.slice()
+        .sort((a, b) => a.name.localeCompare(b.name)).map((per) => "per:" + per.id) }],
+    };
+  }
+  if (kind === "per") {
+    const per = personById(rest);
+    if (!per) return null;
+    const mine = allTaskRefs().filter((x) => x.task.owner === per.id || (x.task.people || []).includes(per.id));
+    mine.sort((a, b) => colTaskSort(a.task, b.task));
+    const open = mine.filter((x) => !x.task.done).length;
+    return {
+      title: per.name, label: per.name,
+      icon: `<span class="col-avatar" style="--pc:${per.color}">${escapeHtml(per.name.charAt(0).toUpperCase())}</span>`,
+      meta: open ? String(open) : "", folder: true,
+      open: () => (window.location.hash = "#/people"),
+      emptyText: "No tasks with " + per.name.split(" ")[0],
+      sections: [{ title: "", keys: mine.map((x) => "t:" + x.ref + ":" + x.task.id) }],
+    };
+  }
+  return null;
+}
+
+function shortDay(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+function openSpaceTab(ref, tab) {
+  projTabFor = ref;
+  projTab = tab;
+  window.location.hash = "#/p/" + ref;
+}
+
+function colTaskPreview(t, p, ref) {
+  const goal = t.goalId && p.goals.find((g) => g.id === t.goalId);
+  const owner = isMine(t) ? "Me" : (personById(t.owner) || {}).name || "Me";
+  const people = (t.people || []).map((id) => personById(id)).filter(Boolean);
+  const note = plainText(t.note);
+  const fact = (k, v) => v ? `<div class="colp-fact"><span>${k}</span><b>${v}</b></div>` : "";
+  return `
+    <div class="colp">
+      <div class="colp-kicker">${escapeHtml(p.name)}${goal ? " › " + escapeHtml(goal.text) : ""}</div>
+      <div class="colp-title ${t.done ? "is-done" : ""}">${escapeHtml(t.text)}</div>
+      <div class="colp-chips">${dueChipHtml(t)}${ownerChipHtml(t)}${t.done ? `<span class="meta-chip">✓ Done</span>` : ""}</div>
+      <div class="colp-factlist">
+        ${fact("Owner", escapeHtml(owner))}
+        ${fact("Due", t.due ? escapeHtml(dueLabel(t.due)) : "")}
+        ${fact("With", people.map((x) => escapeHtml(x.name)).join(", "))}
+        ${fact("Added", t.createdAt ? escapeHtml(fmtDT(t.createdAt)) : "")}
+        ${fact("Closed", t.done && t.closedAt ? escapeHtml(fmtDT(t.closedAt)) : "")}
+      </div>
+      ${note ? `<div class="colp-note colp-note-sm">${noteBodyHtml(t.note)}</div>` : ""}
+      ${t.link ? `<a class="colp-link" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">Link<span>${escapeHtml(t.link)}</span></a>` : ""}
+      <div class="colp-actions">
+        <button class="btn btn-ghost btn-sm" data-colp-toggle>${t.done ? "Reopen" : "Mark done"}</button>
+        <button class="btn btn-primary btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button>
+      </div>
+    </div>`;
+}
+
+function colSpacePreview(p, ref) {
+  const st = spaceStats(p);
+  const isSub = ref.includes("~");
+  const accent = isSub ? kcolor(p.name) : accentFor(ref);
+  const stat = (n, label) => `<div class="colp-stat"><b>${n}</b><span>${label}</span></div>`;
+  return `
+    <div class="colp">
+      <div class="colp-hero"><span class="col-tile col-tile-lg" style="--pa:${accent}">${escapeHtml(initials(p.name))}</span></div>
+      <div class="colp-title">${escapeHtml(p.name)}</div>
+      ${p.description ? `<div class="colp-sub">${escapeHtml(p.description)}</div>` : ""}
+      <div class="colp-stats">
+        ${stat(st.open, "open tasks")}
+        ${stat(st.goals, "goals")}
+        ${stat(st.notes, "notes")}
+        ${st.subs ? stat(st.subs, escapeHtml((p.tracker.name || "tracker").toLowerCase())) : ""}
+      </div>
+      ${st.over ? `<div class="colp-warn">${st.over} overdue</div>` : ""}
+      <div class="colp-actions"><button class="btn btn-primary btn-sm" data-colp-open>Open space</button></div>
+    </div>`;
+}
+
+/* drop path entries that no longer resolve (deleted, archived, moved) */
+function validColPath() {
+  const out = [];
+  let parent = colNode("root");
+  for (const key of colPath) {
+    if (!parent || !parent.sections) break;
+    const listed = parent.sections.some((s) => s.keys.includes(key));
+    const node = listed && colNode(key);
+    if (!node) break;
+    out.push(key);
+    parent = node.folder ? node : null;
+  }
+  return out;
+}
+
+function colRowHtml(key, selected, depth) {
+  const n = colNode(key);
+  if (!n) return "";
+  const lead = n.task
+    ? `<button class="col-check ${n.done ? "done" : ""}" data-col-check="${escapeHtml(key)}" aria-label="${n.done ? "Reopen" : "Mark done"}"></button>`
+    : n.icon || "";
+  const trail = n.task
+    ? `${dueChipHtml(n.task)}${ownerChipHtml(n.task)}`
+    : `${n.meta ? `<span class="col-meta">${n.meta}</span>` : ""}`;
+  return `
+    <div class="col-row ${selected ? "selected" : ""} ${n.done ? "is-done" : ""} ${n.task ? "is-task" : ""}"
+         data-col-key="${escapeHtml(key)}" data-col-depth="${depth}" tabindex="-1" role="option" aria-selected="${selected}">
+      ${lead}
+      <span class="col-label">${escapeHtml(n.label)}</span>
+      <span class="col-trail">${trail}</span>
+      ${n.folder ? `<span class="col-chev">${CHEVRON_R}</span>` : ""}
+    </div>`;
+}
+
+function columnsHtml() {
+  colPath = validColPath();
+  const cols = [];
+  let node = colNode("root");
+  let depth = 0;
+  const keys = ["root", ...colPath];
+  while (node && node.sections) {
+    const sel = colPath[depth];
+    const body = node.sections.filter((s) => s.keys.length).map((s) => `
+      ${s.title ? `<div class="col-section">${escapeHtml(s.title)}</div>` : ""}
+      ${s.keys.map((k) => colRowHtml(k, k === sel, depth)).join("")}
+    `).join("");
+    cols.push(`
+      <div class="col ${depth === colPath.length - 1 ? "col-active" : ""}" data-col="${depth}" role="listbox" aria-label="${escapeHtml(node.title || "")}">
+        <div class="col-head"><span>${escapeHtml(node.title || "")}</span>
+          ${depth > 0 && node.open ? `<button class="col-head-open" data-col-open="${escapeHtml(keys[depth])}" title="Open">Open ${CHEVRON_R}</button>` : ""}
+        </div>
+        <div class="col-body">${body || `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`}</div>
+      </div>`);
+    if (!sel) break;
+    const next = colNode(sel);
+    depth++;
+    if (next.folder) { node = next; continue; }
+    node = null;
+  }
+  // a selected leaf (task/note/link), or a selected space, gets a preview column
+  const last = colPath[colPath.length - 1];
+  const lastNode = last && colNode(last);
+  let preview = "";
+  if (lastNode && lastNode.preview && !lastNode.folder) preview = lastNode.preview();
+  else if (lastNode && lastNode.preview && lastNode.folder && !hasChildren(lastNode)) preview = lastNode.preview();
+  else if (last && last.startsWith("p:") && !hasChildren(lastNode)) {
+    const ref = colSplit(last)[1];
+    preview = colSpacePreview(containerByRef(ref), ref);
+  }
+  if (preview) cols.push(`<div class="col col-preview" data-col="${depth}">${preview}</div>`);
+
+  const crumbs = keys.map((k) => (colNode(k) || {}).title || (colNode(k) || {}).label || "");
+  const backTitle = crumbs.length > 1 ? crumbs[crumbs.length - 2] : "";
+  const curTitle = lastNode ? (lastNode.title || lastNode.label) : "DailySpace";
+  return `
+    <div class="columns ${state.timebarHidden ? "" : "with-timebar"}" data-columns>
+      <div class="cols-mbar">
+        ${colPath.length ? `<button class="cols-back" data-cols-back>&larr; <span>${escapeHtml(backTitle)}</span></button>` : ""}
+        <span class="cols-mtitle">${escapeHtml(curTitle)}</span>
+        ${lastNode && lastNode.open ? `<button class="cols-mopen" data-cols-open>Open</button>` : ""}
+      </div>
+      <div class="cols-scroll" data-cols-scroll>${cols.join("")}</div>
+    </div>`;
+}
+
+function hasChildren(n) {
+  return !!(n && n.sections && n.sections.some((s) => s.keys.length));
+}
+
+function redrawColumns(focusKey) {
+  const el = app.querySelector("[data-columns]");
+  if (!el) return;
+  const prevScroll = el.querySelector("[data-cols-scroll]");
+  const tops = {};
+  prevScroll.querySelectorAll(".col").forEach((c) => {
+    const b = c.querySelector(".col-body");
+    if (b) tops[c.dataset.col] = b.scrollTop;
+  });
+  el.outerHTML = columnsHtml();
+  const fresh = app.querySelector("[data-columns]");
+  fresh.querySelectorAll(".col").forEach((c) => {
+    const b = c.querySelector(".col-body");
+    if (b && tops[c.dataset.col] != null) b.scrollTop = tops[c.dataset.col];
+  });
+  const sc = fresh.querySelector("[data-cols-scroll]");
+  sc.scrollLeft = sc.scrollWidth;
+  wireColumns();
+  if (focusKey) {
+    const row = fresh.querySelector(`[data-col-key="${CSS.escape(focusKey)}"]`);
+    if (row) { row.focus({ preventScroll: true }); row.scrollIntoView({ block: "nearest" }); }
+  }
+}
+
+function colSelect(depth, key) {
+  colPath = [...colPath.slice(0, depth), key];
+  saveColPath();
+  redrawColumns(key);
+}
+
+function colToggleTask(key) {
+  const n = colNode(key);
+  if (!n || !n.task) return;
+  n.task.done = !n.task.done;
+  n.task.closedAt = n.task.done ? new Date().toISOString() : null;
+  persist();
+  redrawColumns(key);
+}
+
+function wireColumns() {
+  const root = app.querySelector("[data-columns]");
+  if (!root) return;
+  root.querySelectorAll("[data-col-key]").forEach((row) => {
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("[data-col-check]")) return;
+      colSelect(+row.dataset.colDepth, row.dataset.colKey);
+    });
+    row.addEventListener("dblclick", (e) => {
+      if (e.target.closest("[data-col-check]")) return;
+      const n = colNode(row.dataset.colKey);
+      if (n && n.open) n.open();
+    });
+  });
+  root.querySelectorAll("[data-col-check]").forEach((b) =>
+    b.addEventListener("click", (e) => { e.stopPropagation(); colToggleTask(b.dataset.colCheck); }));
+  const last = colPath[colPath.length - 1];
+  const lastNode = last && colNode(last);
+  root.querySelectorAll("[data-colp-open], [data-cols-open]").forEach((b) =>
+    b.addEventListener("click", () => lastNode && lastNode.open && lastNode.open()));
+  root.querySelectorAll("[data-col-open]").forEach((b) =>
+    b.addEventListener("click", () => { const n = colNode(b.dataset.colOpen); if (n && n.open) n.open(); }));
+  root.querySelector("[data-colp-toggle]")?.addEventListener("click", () => colToggleTask(last));
+  root.querySelector("[data-cols-back]")?.addEventListener("click", () => {
+    colPath = colPath.slice(0, -1);
+    saveColPath();
+    redrawColumns(colPath[colPath.length - 1]);
+  });
+}
+
+/* Finder keys: ↑↓ move, → opens a folder, ← steps back, Enter/⌘↓ opens, Space toggles a task */
+document.addEventListener("keydown", (e) => {
+  if (!app.querySelector("[data-columns]")) return;
+  if (app.querySelector(".window-backdrop, .projectpage")) return;
+  if (e.target.closest && e.target.closest("input, textarea, [contenteditable=true]")) return;
+  if (e.metaKey && e.key !== "ArrowDown") return;
+  const depth = Math.max(0, colPath.length - 1);
+  const col = app.querySelector(`.col[data-col="${depth}"]`);
+  const rows = col ? [...col.querySelectorAll("[data-col-key]")] : [];
+  const cur = colPath[depth];
+  const idx = rows.findIndex((r) => r.dataset.colKey === cur);
+  if (e.key === "ArrowDown" && !e.metaKey || e.key === "ArrowUp") {
+    e.preventDefault();
+    if (!rows.length) return;
+    const next = idx < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, idx + (e.key === "ArrowDown" ? 1 : -1)));
+    colSelect(depth, rows[next].dataset.colKey);
+  } else if (e.key === "ArrowRight") {
+    const n = cur && colNode(cur);
+    const child = n && n.folder && n.sections.flatMap((s) => s.keys)[0];
+    if (child) { e.preventDefault(); colSelect(depth + 1, child); }
+  } else if (e.key === "ArrowLeft") {
+    if (colPath.length > 1) { e.preventDefault(); colPath = colPath.slice(0, -1); saveColPath(); redrawColumns(colPath[colPath.length - 1]); }
+  } else if (e.key === "Enter" || (e.metaKey && e.key === "ArrowDown")) {
+    const n = cur && colNode(cur);
+    if (n && n.open) { e.preventDefault(); n.open(); }
+  } else if (e.key === " ") {
+    const n = cur && colNode(cur);
+    if (n && n.task) { e.preventDefault(); colToggleTask(cur); }
+  }
+});
+
 
 /* ---------- new project modal ---------- */
 
