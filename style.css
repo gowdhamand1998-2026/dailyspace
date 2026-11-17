@@ -3488,3 +3488,4 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   .sheet-foot { flex-wrap: wrap; }
   .sheet-more { width: 100%; margin-bottom: 4px; }
 }
+.col-active .col-row.selected .col-over { background: rgba(255,255,255,.22); color: #fff; }

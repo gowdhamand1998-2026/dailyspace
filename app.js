@@ -298,7 +298,17 @@ const IMPORTS = [
   { key: "meeting-2026-11-13", at: new Date(2026, 10, 13, 12, 0, 0).toISOString(), build: import20261113 },
   { key: "meeting-2026-11-13-goals", at: new Date(2026, 10, 13, 12, 0, 0).toISOString(), build: link20261113 },
   { key: "owners-due-2026-11-16", at: new Date(2026, 10, 16, 9, 0, 0).toISOString(), build: ownersAndDue20261116 },
+  { key: "others-space-2026-11-17", at: new Date(2026, 10, 17, 12, 0, 0).toISOString(), build: othersSpace20261117 },
 ];
+
+/* "Others" is the catch-all space for things that belong nowhere else:
+   make sure it exists and sits in Spaces (not tucked in a collection or archived) */
+function othersSpace20261117({ project, s }) {
+  const p = project("Others");
+  s.collections.forEach((c) => { c.items = c.items.filter((it) => !(it.type === "project" && it.id === p.id)); });
+  s.archived = s.archived.filter((a) => !(a.type === "project" && a.id === p.id));
+  if (!p.description) p.description = "Anything that doesn't belong to another space";
+}
 
 function applyImports(s) {
   if (!s.imports) s.imports = {};
@@ -396,7 +406,7 @@ function applyImports(s) {
       s.projects.forEach(visit);
     };
 
-    imp.build({ project, company, fill, link, person, eachTask, same });
+    imp.build({ project, company, fill, link, person, eachTask, same, s });
     s.imports[imp.key] = new Date().toISOString();
     importsAppliedNow = true;
   });
@@ -1774,11 +1784,13 @@ function colTaskSort(a, b) {
 function colNode(key) {
   const [kind, rest] = colSplit(key);
   if (kind === "root") {
-    const spaces = state.projects.filter((p) => onDesktop("project", p.id));
+    const isOthers = (p) => p.name.trim().toLowerCase() === "others";
+    const spaces = state.projects.filter((p) => onDesktop("project", p.id))
+      .sort((a, b) => isOthers(a) - isOthers(b));
     const cols = state.collections.filter((c) => !isArchived("collection", c.id));
     const links = state.links.filter((l) => onDesktop("link", l.id));
     return {
-      title: "DailySpace",
+      title: "Home",
       sections: [
         { title: "Spaces", keys: spaces.map((p) => "p:" + p.id) },
         { title: "Collections", keys: cols.map((c) => "c:" + c.id) },
@@ -2118,7 +2130,7 @@ function columnsHtml() {
 
   const crumbs = keys.map((k) => (colNode(k) || {}).title || (colNode(k) || {}).label || "");
   const backTitle = crumbs.length > 1 ? crumbs[crumbs.length - 2] : "";
-  const curTitle = lastNode ? (lastNode.title || lastNode.label) : "DailySpace";
+  const curTitle = lastNode ? (lastNode.title || lastNode.label) : "Home";
   return `
     <div class="columns ${state.timebarHidden ? "" : "with-timebar"}" data-columns>
       <div class="cols-mbar">
