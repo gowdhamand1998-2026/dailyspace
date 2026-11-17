@@ -686,57 +686,98 @@ function updateSyncChip() {
   }
 }
 
-/* full-screen password gate — the only way in */
+/* full-screen password gate — the only way in: a quiet lock screen */
+const GATE_ARROW = `<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h11M11 5.5 15.5 10 11 14.5"/></svg>`;
+let gateClock = null;
+function gateTime() {
+  const d = new Date();
+  const h = d.getHours();
+  return {
+    time: d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).replace(/\s?[AP]M$/i, ""),
+    date: d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }),
+    hello: h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening",
+  };
+}
 function renderGate(message) {
+  const t = gateTime();
   app.innerHTML = `
-    <div class="desktop">
+    <div class="desktop desktop-gate">
       <div class="gate">
-        <div class="gate-card">
-          <div class="gate-logo">Daily<em>Space</em></div>
+        <div class="gate-orb" aria-hidden="true"></div>
+        <div class="gate-stage">
+          <div class="gate-date" data-gate-date>${t.date}</div>
+          <div class="gate-time" data-gate-time>${t.time}</div>
+          <div class="gate-hello" data-gate-hello>${t.hello}.</div>
           ${cloud.ready ? `
-            <input type="password" id="gate-pass" placeholder="Enter password" maxlength="100" autocomplete="current-password" />
-            <p class="form-error" id="gate-error">${message || ""}</p>
-            <button class="btn btn-primary gate-btn" id="gate-enter">Enter</button>
-          ` : `<p class="form-note">Loading…</p>`}
+            <form class="gate-field" id="gate-form" autocomplete="on">
+              <input type="text" name="username" value="${escapeHtml(OWNER_EMAIL)}" autocomplete="username" hidden />
+              <input type="password" id="gate-pass" placeholder="Password" maxlength="100" autocomplete="current-password" aria-label="Password" />
+              <button type="submit" class="gate-go" id="gate-enter" aria-label="Unlock">${GATE_ARROW}</button>
+            </form>
+            <p class="gate-error" id="gate-error" role="alert">${message || ""}</p>
+          ` : `<div class="gate-loading" aria-label="Loading"><span></span></div>`}
+        </div>
+        <div class="gate-foot">
+          <span class="gate-mark">Daily<em>Space</em></span>
+          <span class="gate-sub">Private · locks after 30 minutes away</span>
         </div>
       </div>
     </div>
   `;
 
+  clearInterval(gateClock);
+  gateClock = setInterval(() => {
+    const timeEl = document.querySelector("[data-gate-time]");
+    if (!timeEl) { clearInterval(gateClock); return; }
+    const n = gateTime();
+    timeEl.textContent = n.time;
+    document.querySelector("[data-gate-date]").textContent = n.date;
+    document.querySelector("[data-gate-hello]").textContent = n.hello + ".";
+  }, 5000);
+
   const pass = app.querySelector("#gate-pass");
   if (!pass) return;
   pass.focus();
 
+  const form = app.querySelector("#gate-form");
+  const errorEl = app.querySelector("#gate-error");
+  const btn = app.querySelector("#gate-enter");
+  const fail = (msg) => {
+    errorEl.textContent = msg;
+    form.classList.remove("busy", "shake");
+    void form.offsetWidth; // restart the shake
+    form.classList.add("shake");
+    pass.select();
+  };
+  pass.addEventListener("input", () => { errorEl.textContent = ""; form.classList.toggle("filled", !!pass.value); });
+
   async function unlock() {
     const password = pass.value;
-    if (password.length < 6) return;
-    const errorEl = app.querySelector("#gate-error");
-    const btn = app.querySelector("#gate-enter");
-    btn.textContent = "…";
+    if (form.classList.contains("busy")) return;
+    if (password.length < 6) { if (password) fail("That’s too short."); return; }
     errorEl.textContent = "";
+    form.classList.add("busy");
 
     const { error } = await db.auth.signInWithPassword({ email: OWNER_EMAIL, password });
-    if (!error) { touchActivity(true); return; } // fresh unlock resets the idle clock
+    if (!error) { form.classList.add("ok"); touchActivity(true); return; } // fresh unlock resets the idle clock
 
     if (/invalid login/i.test(error.message)) {
       // first ever visit: no account yet → this password becomes THE password
       const { data, error: e2 } = await db.auth.signUp({ email: OWNER_EMAIL, password });
       if (!e2 && data.session) { touchActivity(true); return; }
       if (!e2 && data.user) {
+        form.classList.remove("busy");
         errorEl.textContent = "First-time setup: confirm the email we just sent, then enter again.";
-        btn.textContent = "Enter";
         return;
       }
-      errorEl.textContent = "Wrong password.";
+      fail("Not quite. Try again.");
     } else {
-      errorEl.textContent = error.message;
+      fail(error.message);
     }
-    btn.textContent = "Enter";
-    pass.select();
   }
 
-  app.querySelector("#gate-enter").addEventListener("click", unlock);
-  pass.addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
+  form.addEventListener("submit", (e) => { e.preventDefault(); unlock(); });
+  btn.blur();
 }
 
 let selectedId = null;
