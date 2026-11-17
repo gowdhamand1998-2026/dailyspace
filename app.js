@@ -688,26 +688,37 @@ function updateSyncChip() {
 
 /* full-screen password gate — the only way in: a quiet lock screen */
 const GATE_ARROW = `<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h11M11 5.5 15.5 10 11 14.5"/></svg>`;
-let gateClock = null;
-function gateTime() {
-  const d = new Date();
-  const h = d.getHours();
-  return {
-    time: d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).replace(/\s?[AP]M$/i, ""),
-    date: d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }),
-    hello: h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening",
-  };
-}
+const GATE_SCENE = `<svg class="gate-scene" viewBox="0 0 240 150" fill="none" aria-hidden="true">
+  <defs>
+    <radialGradient id="gs-glow" cx="1" cy="0.55" r="0.9"><stop offset="0" stop-color="#f3e6c8" stop-opacity=".55"/><stop offset="1" stop-color="#f3e6c8" stop-opacity="0"/></radialGradient>
+  </defs>
+  <g class="gs-line">
+    <path class="gs-faint" d="M24 140h196"/>
+    <path d="M104 96h112M204 96v44"/>
+    <path class="gs-glow" d="M168 95 L174 66 L118 78 L112 95 Z" fill="url(#gs-glow)" stroke="none"/>
+    <path d="M128 95h40M168 95l6-28"/>
+    <path d="M187 85h10v11h-10z M197 88c4 0 4 6 0 6"/>
+    <path class="gs-steam s1" d="M190 80c-3-4 3-6 0-10"/>
+    <path class="gs-steam s2" d="M194 79c-3-4 3-6 0-10"/>
+    <path d="M64 70l4 38h30M82 108v32M72 140h20"/>
+    <path d="M88 104c4-14 4-24 8-32"/>
+    <g class="gs-head"><circle cx="104" cy="58" r="10"/><path d="M95 54c2-8 12-11 18-4"/></g>
+    <path d="M97 76l15 15"/>
+    <g class="gs-hand"><path d="M112 91h19"/></g>
+    <path d="M88 104l30 2 2 32h9"/>
+  </g>
+</svg>`;
+/* the one line under the password */
+const GATE_LINE = ["Impatience with actions, patience with results.", "Naval Ravikant"];
 function renderGate(message) {
-  const t = gateTime();
   app.innerHTML = `
     <div class="desktop desktop-gate">
       <div class="gate">
         <div class="gate-orb" aria-hidden="true"></div>
         <div class="gate-stage">
-          <div class="gate-date" data-gate-date>${t.date}</div>
-          <div class="gate-time" data-gate-time>${t.time}</div>
-          <div class="gate-hello" data-gate-hello>${t.hello}.</div>
+          ${GATE_SCENE}
+          <h1 class="gate-title">Daily<em>Space</em></h1>
+          <p class="gate-line">${GATE_LINE[0]}<span>${GATE_LINE[1]}</span></p>
           ${cloud.ready ? `
             <form class="gate-field" id="gate-form" autocomplete="on">
               <input type="text" name="username" value="${escapeHtml(OWNER_EMAIL)}" autocomplete="username" hidden />
@@ -717,23 +728,9 @@ function renderGate(message) {
             <p class="gate-error" id="gate-error" role="alert">${message || ""}</p>
           ` : `<div class="gate-loading" aria-label="Loading"><span></span></div>`}
         </div>
-        <div class="gate-foot">
-          <span class="gate-mark">Daily<em>Space</em></span>
-          <span class="gate-sub">Private · locks after 30 minutes away</span>
-        </div>
       </div>
     </div>
   `;
-
-  clearInterval(gateClock);
-  gateClock = setInterval(() => {
-    const timeEl = document.querySelector("[data-gate-time]");
-    if (!timeEl) { clearInterval(gateClock); return; }
-    const n = gateTime();
-    timeEl.textContent = n.time;
-    document.querySelector("[data-gate-date]").textContent = n.date;
-    document.querySelector("[data-gate-hello]").textContent = n.hello + ".";
-  }, 5000);
 
   const pass = app.querySelector("#gate-pass");
   if (!pass) return;
