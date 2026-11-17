@@ -2087,7 +2087,7 @@ function colRowHtml(key, selected, depth) {
       ${lead}
       <span class="col-label">${escapeHtml(n.label)}</span>
       <span class="col-trail">${trail}</span>
-      ${colTarget(key) ? `<button class="col-more" data-col-more="${escapeHtml(key)}" aria-label="More actions" title="More">${MORE_SVG}</button>` : ""}
+      ${colTarget(key) ? `<button class="col-more" data-col-more="${escapeHtml(key)}" aria-label="More actions" title="More">${MORE_SVG}</button>` : `<span class="col-more col-more-blank" aria-hidden="true"></span>`}
       ${n.folder ? `<span class="col-chev">${CHEVRON_R}</span>` : ""}
     </div>`;
 }
@@ -2618,50 +2618,27 @@ function colDelete(key) {
 function colRename(key) {
   const t = colTarget(key);
   if (!t || !t.field) return;
-  const row = app.querySelector(`[data-col-key="${CSS.escape(key)}"]`);
-  const label = row && row.offsetParent ? row.querySelector(".col-label") : null;
   const commit = (val) => {
     const v = val.trim();
-    if (v && v !== t.obj[t.field]) {
-      t.obj[t.field] = v;
-      if (t.noun === "note") t.obj.updatedAt = new Date().toISOString();
-      persist();
-    }
+    if (v && v !== t.obj[t.field]) { t.obj[t.field] = v; persist(); }
     redrawColumns(key);
   };
-  if (!label) {
-    const sheet = sheetOpen({ title: `Rename ${t.noun}`, body: `<input type="text" data-sheet-name maxlength="200" />`, primary: "Save" });
-    if (!sheet) return;
-    const input = sheet.el.querySelector("[data-sheet-name]");
-    input.value = t.obj[t.field] || "";
-    input.focus(); input.select();
-    const done = () => { sheet.close(); commit(input.value); };
-    sheet.el.querySelector("[data-sheet-ok]").addEventListener("click", done);
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); done(); } });
-    return;
-  }
-  const input = document.createElement("textarea");
-  input.className = "col-rename";
-  input.rows = 1;
-  input.value = t.obj[t.field] || "";
-  label.replaceWith(input);
-  row.classList.add("renaming");
-  autoGrow(input);
-  input.focus(); input.select();
-  let finished = false;
-  const finish = (save) => {
-    if (finished) return;
-    finished = true;
-    if (save) commit(input.value); else redrawColumns(key);
-  };
-  input.addEventListener("input", () => autoGrow(input));
-  input.addEventListener("keydown", (e) => {
-    e.stopPropagation();
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); finish(true); }
-    if (e.key === "Escape") { e.preventDefault(); finish(false); }
+  const long = t.field === "text";
+  const sheet = sheetOpen({
+    title: `Rename ${t.noun}`,
+    body: long
+      ? `<textarea class="sheet-text" rows="2" data-sheet-name maxlength="400"></textarea>`
+      : `<input type="text" data-sheet-name maxlength="200" />`,
+    primary: "Save",
   });
-  input.addEventListener("blur", () => finish(true));
-  ["click", "dblclick", "pointerdown"].forEach((ev) => input.addEventListener(ev, (e) => e.stopPropagation()));
+  if (!sheet) return;
+  const input = sheet.el.querySelector("[data-sheet-name]");
+  input.value = t.obj[t.field] || "";
+  if (long) { autoGrow(input); input.addEventListener("input", () => autoGrow(input)); }
+  input.focus(); input.select();
+  const done = () => { sheet.close(); commit(input.value); };
+  sheet.el.querySelector("[data-sheet-ok]").addEventListener("click", done);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); done(); } });
 }
 
 /* the floating ⋯ menu */
