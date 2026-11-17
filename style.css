@@ -6,9 +6,9 @@
 
 :root {
   --text: #f3f4f6;
-  --text-2: #a1a3aa;
-  --text-3: #63656d;
-  --line: rgba(255, 255, 255, 0.09);
+  --text-2: #c3c5cc;
+  --text-3: #8d909a;
+  --line: rgba(255, 255, 255, 0.11);
   --line-strong: rgba(255, 255, 255, 0.18);
   --select: #3b82f6;
 
@@ -3489,3 +3489,5 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   .sheet-more { width: 100%; margin-bottom: 4px; }
 }
 .col-active .col-row.selected .col-over { background: rgba(255,255,255,.22); color: #fff; }
+.col-coll { color: #a78bfa; }
+.col-coll svg { width: 18px; height: 18px; }
