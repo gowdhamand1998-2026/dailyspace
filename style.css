@@ -3229,7 +3229,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   overscroll-behavior-x: contain;
 }
 .col {
-  flex: 0 0 268px; min-width: 0; display: flex; flex-direction: column;
+  flex: 0 0 300px; min-width: 0; display: flex; flex-direction: column;
   border-right: 1px solid var(--line);
 }
 .col-head {
@@ -3256,7 +3256,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 
 .col-row {
   display: flex; align-items: center; gap: 9px;
-  min-height: 32px; padding: 4px 6px 4px 8px; border-radius: 8px;
+  min-height: 34px; padding: 6px 6px 6px 8px; border-radius: 8px;
   font-size: 13px; color: var(--text); cursor: default; outline: none;
 }
 .col-row:hover { background: rgba(255,255,255,.045); }
@@ -3264,7 +3264,11 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .col-active .col-row.selected { background: var(--select); }
 .col-active .col-row.selected .col-meta, .col-active .col-row.selected .col-chev,
 .col-active .col-row.selected .col-glyph { color: rgba(255,255,255,.9); }
-.col-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-label {
+  flex: 1; min-width: 0; line-height: 1.4;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  overflow-wrap: anywhere;
+}
 .col-row.is-done .col-label { color: var(--text-3); text-decoration: line-through; text-decoration-color: rgba(255,255,255,.18); }
 .col-trail { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
 .col-trail .due-chip, .col-trail .owner-chip { height: 20px; padding: 0 6px; font-size: 11px; border-radius: 6px; }
@@ -3387,4 +3391,74 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   .col-preview { overflow-y: auto; }
   .colp { padding: 20px 18px 26px; }
   .colp-actions .btn { flex: 1; justify-content: center; text-align: center; padding: 11px 14px; font-size: 14px; }
+}
+
+/* the deepest list (the one you're reading) gets the room: wider, full wrap */
+.cols-scroll > .col:last-child:not(.col-preview) { flex: 1 0 440px; max-width: 760px; }
+.cols-scroll > .col:last-child:not(.col-preview) .col-label { -webkit-line-clamp: unset; display: block; }
+.col:has(+ .col-preview) { flex-basis: 380px; }
+.col:has(+ .col-preview) .col-label { -webkit-line-clamp: 3; }
+.cols-scroll > .col-preview { flex: 1 0 400px; }
+.col-row.is-task, .col-row:has(.col-thread) { align-items: flex-start; }
+.col-row.is-task .col-check { margin-top: 1.5px; }
+.col-row.is-task .col-trail { margin-top: -1px; }
+.col-row:has(.col-thread) .col-glyph, .col-row:has(.col-thread) .col-meta { margin-top: 0; }
+.col-thread { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-right: 6px; border-radius: 6px; background: rgba(59,130,246,.16); color: #93b4f8; font-size: 10.5px; font-weight: 500; }
+.col-active .col-row.selected .col-thread { background: rgba(255,255,255,.2); color: #fff; }
+
+/* add-in-place at the top of a goal / Others / Notes column */
+.col-compose {
+  display: flex; align-items: flex-start; gap: 9px;
+  margin: 2px 0 6px; padding: 6px 8px; border-radius: 8px;
+  border: 1px dashed var(--line-strong);
+  transition: border-color .15s, background .15s;
+}
+.col-compose:focus-within { border-style: solid; border-color: var(--select); background: rgba(59,130,246,.06); }
+.col-compose-plus { width: 22px; flex-shrink: 0; text-align: center; color: var(--text-3); font-size: 16px; line-height: 20px; }
+.col-compose textarea {
+  flex: 1; min-width: 0; resize: none; border: none; outline: none; background: none;
+  color: var(--text); font: inherit; font-size: 13px; line-height: 20px; padding: 0;
+}
+.col-compose textarea::placeholder { color: var(--text-3); }
+
+/* threads (Notes tab cards and the columns preview) */
+.thread { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); user-select: text; }
+.note-card .thread { margin: 2px -4px 6px; }
+.thread-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; padding-left: 12px; border-left: 2px solid rgba(59,130,246,.35); }
+.thread-entry { padding: 5px 0 5px 2px; }
+.thread-text { font-size: 13.5px; line-height: 1.55; color: var(--text); white-space: normal; overflow-wrap: anywhere; }
+.thread-foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 11px; color: var(--text-3); }
+.thread-del { opacity: 0; width: 18px; height: 18px; border-radius: 5px; font-size: 14px; line-height: 1; color: var(--text-3); }
+.thread-entry:hover .thread-del, .thread-del:focus-visible { opacity: 1; }
+.thread-del:hover { color: #f87171; background: rgba(248,113,113,.1); }
+.thread-compose {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 6px 6px 6px 12px; border-radius: 10px;
+  background: rgba(255,255,255,.04); border: 1px solid transparent;
+  transition: border-color .15s, background .15s;
+}
+.thread-compose:focus-within { border-color: var(--line-strong); background: rgba(255,255,255,.06); }
+.thread-compose textarea {
+  flex: 1; min-width: 0; resize: none; border: none; outline: none; background: none;
+  color: var(--text); font: inherit; font-size: 13.5px; line-height: 20px; padding: 3px 0; max-height: 220px;
+}
+.thread-compose textarea::placeholder { color: var(--text-3); }
+.thread-post {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--select); color: #fff; transition: opacity .15s, transform .1s;
+}
+.thread-post svg { width: 14px; height: 14px; }
+.thread-post:disabled { opacity: .25; cursor: default; }
+.thread-post:not(:disabled):active { transform: scale(.92); }
+.colp-thread-head { margin-top: 22px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.colp .thread { border-top: none; padding-top: 8px; }
+
+@media (max-width: 700px) {
+  .cols-scroll > .col:last-child:not(.col-preview), .cols-scroll > .col-preview { max-width: none; flex: 1 1 auto; }
+  .col-label { -webkit-line-clamp: unset; display: block; }
+  .col-compose { padding: 10px; }
+  .col-compose textarea, .thread-compose textarea { font-size: 16px; } /* no iOS zoom */
+  .thread-del { opacity: 1; }
+  .thread-post { width: 32px; height: 32px; }
 }

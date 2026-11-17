@@ -1353,8 +1353,8 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
         <div class="dock-sep"></div>
         ${TODAY_ENABLED ? `<button class="dock-btn" data-tip="Today" data-dock-today>${ICONS.today}
           ${(() => { const n = todayUrgentCount(); return `<span class="archive-count" data-today-badge ${n ? "" : "hidden"}>${n}</span>`; })()}
-        </button>` : ""}
-        <div class="dock-sep"></div>
+        </button>
+        <div class="dock-sep"></div>` : ""}
         <button class="dock-btn" data-tip="Tidy icons" data-dock-tidy>${ICONS.broom}</button>
         <div class="dock-sep"></div>
         <button class="dock-btn" data-tip="Review" data-dock-review>${ICONS.review}</button>
@@ -1850,7 +1850,7 @@ function colNode(key) {
         { title: p.tracker ? p.tracker.name : "", keys: subs.map((c) => "p:" + rest + "~" + c.id) },
         { title: "Goals", keys: p.goals.slice().sort(colTaskSort).map((g) => "g:" + rest + ":" + g.id) },
         { title: "", keys: [
-          ...(loose.length || !p.goals.length ? ["o:" + rest] : []),
+          "o:" + rest,
           "nl:" + rest,
           ...(p.links.length ? ["lk:" + rest] : []),
         ] },
@@ -1873,6 +1873,11 @@ function colNode(key) {
       folder: true,
       open: () => openSpaceTab(ref, "work"),
       emptyText: "No subtasks yet",
+      compose: { placeholder: "Add a subtask…", add: (text) => {
+        const t = { id: uid(), text, done: false, createdAt: new Date().toISOString(), goalId: gid };
+        p.tasks.push(t);
+        return "t:" + ref + ":" + t.id;
+      } },
       sections: [{ title: "", keys: subs.map((t) => "t:" + ref + ":" + t.id) }],
     };
   }
@@ -1887,6 +1892,11 @@ function colNode(key) {
       meta: open ? String(open) : "", folder: true,
       open: () => openSpaceTab(rest, "work"),
       emptyText: "No loose tasks",
+      compose: { placeholder: "Add a task…", add: (text) => {
+        const t = { id: uid(), text, done: false, createdAt: new Date().toISOString() };
+        p.tasks.push(t);
+        return "t:" + rest + ":" + t.id;
+      } },
       sections: [{ title: "", keys: loose.map((t) => "t:" + rest + ":" + t.id) }],
     };
   }
@@ -1899,6 +1909,12 @@ function colNode(key) {
       meta: p.notesList.length ? String(p.notesList.length) : "", folder: true,
       open: () => openSpaceTab(rest, "notes"),
       emptyText: "No notes yet",
+      compose: { placeholder: "Write a new note…", multiline: true, add: (text) => {
+        const now = new Date().toISOString();
+        const n = { id: uid(), text: escapeHtml(text).replace(/\n/g, "<br>"), createdAt: now, updatedAt: now };
+        p.notesList.unshift(n);
+        return "n:" + rest + ":" + n.id;
+      } },
       sections: [{ title: "", keys: p.notesList.map((n) => "n:" + rest + ":" + n.id) }],
     };
   }
@@ -1937,15 +1953,18 @@ function colNode(key) {
     if (!n) return null;
     const text = plainText(n.text);
     return {
-      label: text.slice(0, 80) || "Empty note",
+      label: text.slice(0, 160) || "Empty note",
+      note: n,
       icon: `<span class="col-glyph">${COL_ICONS.note}</span>`,
-      meta: shortDay(n.updatedAt || n.createdAt),
+      meta: (n.thread && n.thread.length ? `<span class="col-thread">${n.thread.length} ${n.thread.length === 1 ? "reply" : "replies"}</span>` : "") + shortDay(n.updatedAt || n.createdAt),
       open: () => openSpaceTab(ref, "notes"),
       preview: () => `
         <div class="colp">
           <div class="colp-kicker">Note · ${escapeHtml(p.name)}</div>
           <div class="colp-note">${noteBodyHtml(n.text)}</div>
           <div class="colp-facts"><span>${noteStampHtml(n)}</span></div>
+          <div class="colp-thread-head">Thread</div>
+          ${threadHtml(n)}
           <div class="colp-actions"><button class="btn btn-primary btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button></div>
         </div>`,
     };
@@ -2135,7 +2154,13 @@ function columnsHtml() {
         <div class="col-head"><span>${escapeHtml(node.title || "")}</span>
           ${depth > 0 && node.open ? `<button class="col-head-open" data-col-open="${escapeHtml(keys[depth])}" title="Open">Open ${CHEVRON_R}</button>` : ""}
         </div>
-        <div class="col-body">${body || `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`}</div>
+        <div class="col-body">
+          ${node.compose ? `<div class="col-compose" data-col-compose="${escapeHtml(keys[depth])}" data-depth="${depth}">
+            <span class="col-compose-plus">+</span>
+            <textarea rows="1" data-compose-input placeholder="${escapeHtml(node.compose.placeholder)}" aria-label="${escapeHtml(node.compose.placeholder)}"></textarea>
+          </div>` : ""}
+          ${body || (node.compose ? "" : `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`)}
+        </div>
       </div>`);
     if (!sel) break;
     const next = colNode(sel);
@@ -2234,6 +2259,36 @@ function wireColumns() {
     b.addEventListener("click", () => lastNode && lastNode.open && lastNode.open()));
   root.querySelectorAll("[data-col-open]").forEach((b) =>
     b.addEventListener("click", () => { const n = colNode(b.dataset.colOpen); if (n && n.open) n.open(); }));
+  root.querySelectorAll("[data-col-compose]").forEach((box) => {
+    const node = colNode(box.dataset.colCompose);
+    const ta = box.querySelector("[data-compose-input]");
+    ta.addEventListener("input", () => autoGrow(ta));
+    ta.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") { ta.value = ""; ta.blur(); return; }
+      if (e.key !== "Enter" || e.isComposing) return;
+      if (node.compose.multiline && e.shiftKey) return;
+      e.preventDefault();
+      const text = ta.value.trim();
+      if (!text) return;
+      const newKey = node.compose.add(text);
+      persist();
+      const depth = +box.dataset.depth;
+      // tasks: stay in the box to keep adding; notes: open the new note
+      if (node.compose.multiline) { colSelect(depth + 1, newKey); return; }
+      colPath = colPath.slice(0, depth + 1);
+      saveColPath();
+      redrawColumns();
+      const again = app.querySelector(`[data-col-compose="${CSS.escape(box.dataset.colCompose)}"] [data-compose-input]`);
+      if (again) again.focus();
+    });
+  });
+  if (lastNode && lastNode.note) {
+    wireThread(root.querySelector(".col-preview [data-thread]"), lastNode.note, () => {
+      const row = root.querySelector(`[data-col-key="${CSS.escape(last)}"] .col-meta`);
+      if (row) row.innerHTML = colNode(last).meta;
+    });
+  }
   root.querySelector("[data-colp-toggle]")?.addEventListener("click", () => colToggleTask(last));
   root.querySelector("[data-cols-back]")?.addEventListener("click", () => {
     colPath = colPath.slice(0, -1);
@@ -2273,6 +2328,76 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+
+/* ---------- note threads: running replies under any note ----------
+   note.thread = [{ id, text, createdAt }], oldest first */
+
+function threadEntryHtml(e) {
+  return `
+    <div class="thread-entry" data-entry="${e.id}">
+      <div class="thread-text">${escapeHtml(e.text).replace(/\n/g, "<br>")}</div>
+      <div class="thread-foot">
+        <span>${escapeHtml(fmtDT(e.createdAt))}</span>
+        <button class="thread-del" data-thread-del="${e.id}" title="Delete" aria-label="Delete">&times;</button>
+      </div>
+    </div>`;
+}
+
+function threadHtml(note) {
+  const list = note.thread || [];
+  return `
+    <div class="thread ${list.length ? "has-entries" : ""}" data-thread>
+      ${list.length ? `<div class="thread-list">${list.map(threadEntryHtml).join("")}</div>` : ""}
+      <div class="thread-compose">
+        <textarea rows="1" data-thread-input placeholder="${list.length ? "Add to the thread…" : "Start a thread…"}" aria-label="Add to the thread"></textarea>
+        <button class="thread-post" data-thread-post aria-label="Post" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+        </button>
+      </div>
+    </div>`;
+}
+
+function autoGrow(ta) {
+  ta.style.height = "auto";
+  ta.style.height = Math.min(ta.scrollHeight, 220) + "px";
+}
+
+/* wires a [data-thread] element in place; onChange fires after any edit */
+function wireThread(el, note, onChange) {
+  if (!el) return;
+  const input = el.querySelector("[data-thread-input]");
+  const post = el.querySelector("[data-thread-post]");
+  const redraw = (focus) => {
+    const fresh = elFromHtml(threadHtml(note));
+    el.replaceWith(fresh);
+    wireThread(fresh, note, onChange);
+    if (focus) fresh.querySelector("[data-thread-input]").focus();
+    if (onChange) onChange();
+  };
+  const submit = () => {
+    const text = input.value.trim();
+    if (!text) return;
+    if (!note.thread) note.thread = [];
+    note.thread.push({ id: uid(), text, createdAt: new Date().toISOString() });
+    note.updatedAt = new Date().toISOString();
+    persist();
+    redraw(true);
+  };
+  input.addEventListener("input", () => { autoGrow(input); post.disabled = !input.value.trim(); });
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
+  });
+  post.addEventListener("pointerdown", (e) => e.preventDefault());
+  post.addEventListener("click", submit);
+  el.querySelectorAll("[data-thread-del]").forEach((b) => b.addEventListener("click", () => {
+    showConfirm({ title: "Delete reply?", message: "This removes it from the thread." }, () => {
+      note.thread = (note.thread || []).filter((x) => x.id !== b.dataset.threadDel);
+      persist();
+      redraw(false);
+    });
+  }));
+}
 
 /* ---------- new project modal ---------- */
 
@@ -3344,6 +3469,7 @@ function noteCardHtml(n) {
         <span class="note-date">${noteStampHtml(n)}</span>
         <button class="action-btn item-delete" data-delnote title="Delete note">&times;</button>
       </div>
+      ${threadHtml(n)}
     </div>`;
 }
 
@@ -3794,7 +3920,10 @@ function wireTabContent(id, page) {
       });
     }
 
-    feed.querySelectorAll(".note-card").forEach(wireNoteCard);
+    feed.querySelectorAll(".note-card").forEach((card) => {
+      wireNoteCard(card);
+      wireThread(card.querySelector("[data-thread]"), p.notesList.find((n) => n.id === card.dataset.note));
+    });
 
     // "+ Add a note" → a fresh card appears at the top, ready to type
     page.querySelector("[data-add-note]").addEventListener("click", () => {
@@ -3804,6 +3933,7 @@ function wireTabContent(id, page) {
       const card = elFromHtml(noteCardHtml(n));
       feed.prepend(card);
       wireNoteCard(card);
+      wireThread(card.querySelector("[data-thread]"), n);
       card.querySelector(".note-card-text").focus();
 
     });
