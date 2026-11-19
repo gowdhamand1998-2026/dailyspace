@@ -1912,10 +1912,12 @@ function colNode(key) {
     return {
       title: "Home",
       sections: [
-        { title: "Spaces", keys: spaces.map((p) => "p:" + p.id),
+        // one list: single projects, folders of projects, and collections (also folders)
+        { title: "Spaces", keys: [
+            ...spaces.filter((p) => !isOthers(p)).map((p) => "p:" + p.id),
+            ...cols.map((c) => "c:" + c.id),
+            ...spaces.filter(isOthers).map((p) => "p:" + p.id)],
           action: { label: "Add space", run: () => showNewProjectModal() } },
-        { title: "Collections", keys: cols.map((c) => "c:" + c.id),
-          action: { label: "Add collection", run: () => showCollectionComposer(null) } },
         { title: "", divider: true, keys: ["links"] },
         { title: "Lists", keys: [...Object.keys(WIDGETS).map((k) => "w:" + k), "people"] },
       ],
@@ -2093,16 +2095,15 @@ function colNode(key) {
     if (!c) return null;
     return {
       title: c.name, label: c.name,
-      icon: `<span class="col-glyph col-coll">${COL_ICONS.folder}</span>`,
+      icon: `<span class="col-tile col-tile-folder" style="--pa:${kcolor(c.name)}">${COL_ICONS.folder}</span>`,
       meta: String(c.items.length), folder: true,
-      bigTitle: true,
       collection: c.id,
       header: () => `<div class="col-ghead"><div class="col-acts">
           <button class="col-act" data-coll-rename="${escapeHtml(c.id)}">Rename</button>
           <button class="col-act col-act-quiet" data-coll-delete="${escapeHtml(c.id)}">Delete collection</button>
         </div></div>`,
       emptyText: "Nothing in this collection yet",
-      sections: [{ title: "", keys: c.items
+      sections: [{ title: "Projects", keys: c.items
         .filter((it) => it.type === "project" ? getProject(it.id) : state.links.some((l) => l.id === it.id))
         .map((it) => (it.type === "project" ? "p:" : "l:") + it.id) }],
     };
