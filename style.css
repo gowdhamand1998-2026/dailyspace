@@ -4236,3 +4236,9 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 @media (min-width: 701px) {
   .cols-scroll > .col.col-folder:not([data-col="0"]):not(.col-preview):not(.col-fill) { flex-basis: 300px; }
 }
+
+/* folders: a plain grey folder mark, no box, no colour */
+.col-tile.col-tile-folder { background: none; box-shadow: none; }
+.col-tile.col-tile-folder svg { width: 17px; height: 17px; color: var(--text-2); }
+.col-active .col-row.selected .col-tile-folder { background: none; }
+.col-active .col-row.selected .col-tile-folder svg { color: #fff; }
