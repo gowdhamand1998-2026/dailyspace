@@ -4174,3 +4174,16 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .col-dates > span { text-align: center; }
 .col-thead { padding-right: 6px; }
 .col-row.is-task:has(.col-dates) .col-more { align-self: center; }
+
+/* links as a plain list: icon, name, site in grey, ··· on hover */
+.lk-grid { display: flex; flex-direction: column; gap: 0; padding: 4px 0 6px; }
+.lk-card {
+  gap: 10px; padding: 0 6px 0 8px; min-height: 40px; border-radius: 8px;
+  background: transparent; border: none;
+}
+.lk-card + .lk-card { margin-top: 2px; }
+.lk-card:hover, .lk-card:focus-visible { background: rgba(255,255,255,.06); border: none; }
+.lk-card .col-tile { width: 22px; height: 22px; }
+.lk-text { flex-direction: row; align-items: baseline; gap: 12px; }
+.lk-name { flex: 0 1 auto; }
+.lk-host { margin-left: auto; flex-shrink: 0; max-width: 45%; font-size: 12px; }
