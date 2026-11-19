@@ -2088,41 +2088,33 @@ function colTaskPreview(t, p, ref) {
     </div>`;
 }
 
+/* a space is picked. The columns already show its name, goals and their
+   counts, so this side only adds what they can't: how the week is going
+   and which tasks come next (tasks are otherwise one click deeper). */
 function colSpacePreview(p, ref) {
-  const st = spaceStats(p);
   const open = p.tasks.filter((t) => !t.done);
+  const over = open.filter((t) => t.due && dueDelta(t.due) < 0).length;
   const week = open.filter((t) => t.due && dueDelta(t.due) >= 0 && dueDelta(t.due) <= 7).length;
-  const goals = p.goals.filter((g) => !g.done);
-  const goalRows = goals.map((g) => {
-    const subs = p.tasks.filter((t) => t.goalId === g.id);
-    const done = subs.filter((t) => t.done).length;
-    const pct = subs.length ? Math.round((done / subs.length) * 100) : 0;
-    return `<button class="ov-goal" data-upnext="${escapeHtml(ref)}" data-upnext-tail="g:${escapeHtml(ref)}:${g.id}">
-      <span class="ov-goal-name">${escapeHtml(g.text)}</span>
-      <span class="ov-goal-frac">${subs.length ? `${done}/${subs.length}` : "No subtasks"}</span>
-      <span class="ov-bar"><span style="width:${pct}%"></span></span>
-    </button>`;
-  }).join("");
-  const next = open.slice().sort(colTaskSort).slice(0, 5).map((t) => {
+  const since = Date.now() - 7 * 864e5;
+  const doneWeek = p.tasks.filter((t) => t.done && t.closedAt && new Date(t.closedAt) >= since).length
+    + p.goals.filter((g) => g.done && g.closedAt && new Date(g.closedAt) >= since).length;
+  const next = open.slice().sort(colTaskSort).slice(0, 6).map((t) => {
+    const goal = t.goalId && p.goals.find((g) => g.id === t.goalId);
     const tail = [t.goalId ? `g:${ref}:${t.goalId}` : `o:${ref}`, `t:${ref}:${t.id}`];
     return `<button class="upnext-row" data-upnext="${escapeHtml(ref)}" data-upnext-tail="${escapeHtml(tail.join("|"))}">
-      <span class="upnext-text">${escapeHtml(t.text)}</span>${colTaskSub(t)}
+      <span class="upnext-text">${escapeHtml(t.text)}</span>
+      <span class="upnext-space">${goal ? escapeHtml(goal.text) : "Others"}</span>
+      ${colTaskSub(t)}
     </button>`;
   }).join("");
   const stat = (n, label, cls = "") => `<div class="ov-stat ${cls}"><b>${n}</b><span>${label}</span></div>`;
   return `
     <div class="colp ov">
-      <div class="colp-kicker">Space</div>
-      <div class="colp-title">${escapeHtml(p.name)}</div>
-      ${p.description ? `<div class="colp-sub">${escapeHtml(p.description)}</div>` : ""}
+      ${p.description ? `<div class="ov-desc">${escapeHtml(p.description)}</div>` : ""}
       <div class="ov-stats">
-        ${stat(st.open, "open tasks")}
-        ${stat(st.over, "overdue", st.over ? "is-over" : "")}
+        ${stat(over, "overdue", over ? "is-over" : "")}
         ${stat(week, "due this week")}
-      </div>
-      <div class="ov-block">
-        <div class="ov-head"><span>Goals</span><button class="ov-add" data-ov-add="goal">${ICONS.plus}Add goal</button></div>
-        ${goalRows || `<p class="ov-empty">No goals yet. Goals hold the bigger outcomes; tasks sit under them.</p>`}
+        ${stat(doneWeek, "done this week")}
       </div>
       <div class="ov-block">
         <div class="ov-head"><span>Next up</span><button class="ov-add" data-ov-add="task">${ICONS.plus}Add task</button></div>
@@ -2131,29 +2123,27 @@ function colSpacePreview(p, ref) {
     </div>`;
 }
 
-/* a goal (or Others) is picked: its progress and its details */
+/* a goal (or Others) is picked. Its name and subtasks are already in the
+   columns, so this side holds progress, owner, due date and the actions. */
 function colGoalPreview(p, ref, g, subs) {
   const done = subs.filter((t) => t.done).length;
   const pct = subs.length ? Math.round((done / subs.length) * 100) : 0;
   const fact = (k, v) => v ? `<div class="colp-fact"><span>${k}</span><b>${v}</b></div>` : "";
   if (!g) return `
     <div class="colp ov">
-      <div class="colp-kicker">${escapeHtml(p.name)}</div>
-      <div class="colp-title">Others</div>
-      <div class="colp-sub">Tasks in ${escapeHtml(p.name)} that don't belong to a goal. Pick one to see it, or add one with “Add task”.</div>
+      <p class="ov-empty">Tasks that don't belong to any goal. Pick one to see its details.</p>
     </div>`;
   const owner = isMine(g) ? "Me" : (personById(g.owner) || {}).name || "Me";
   return `
     <div class="colp ov">
-      <div class="colp-kicker">Goal · ${escapeHtml(p.name)}</div>
-      <div class="colp-title ${g.done ? "is-done" : ""}">${escapeHtml(g.text)}</div>
+      <div class="ov-head"><span>Progress</span></div>
       <div class="ov-progress">
         <span class="ov-bar ov-bar-lg"><span style="width:${pct}%"></span></span>
-        <span>${subs.length ? `${done} of ${subs.length} subtasks done` : "No subtasks yet"}</span>
+        <span>${subs.length ? `${done} of ${subs.length} done` : "No subtasks yet"}</span>
       </div>
       <div class="colp-factlist">
         ${fact("Owner", escapeHtml(owner))}
-        ${fact("Due", g.due ? colTaskSub({ ...g, owner: "me" }).replace('class="col-sub"', 'class="colp-due"') : "")}
+        ${fact("Due", g.due ? colTaskSub({ ...g, owner: "me" }).replace('class="col-sub"', 'class="colp-due"') : "None")}
       </div>
       <div class="colp-actions">
         <button class="btn btn-primary btn-sm" data-ov-goal-toggle>${g.done ? "Reopen goal" : "Mark goal done"}</button>

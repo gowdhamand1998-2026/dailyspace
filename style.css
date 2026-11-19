@@ -3991,3 +3991,8 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .cols-rail .col[data-col="0"] .col-section + .col-row { margin-top: 10px; }
 .col-section + .col-row.is-others { margin-top: 0; }
 .col-section + .col-row.is-others::before { display: none; }
+.ov-desc { font-size: 14px; line-height: 1.5; color: var(--text-2); max-width: 520px; }
+.ov-stats:first-child { margin-top: 0; }
+.ov > .ov-head:first-child { margin-bottom: 10px; }
+.ov > .ov-progress:nth-child(2) { margin-top: 0; }
+.ov .upnext-row { grid-template-columns: minmax(0, 1fr) auto; }
