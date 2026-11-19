@@ -4187,3 +4187,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .lk-text { flex-direction: row; align-items: baseline; gap: 12px; }
 .lk-name { flex: 0 1 auto; }
 .lk-host { margin-left: auto; flex-shrink: 0; max-width: 45%; font-size: 12px; }
+
+/* a touch more room between a heading (and its add button) and the first row */
+.col-section { padding-bottom: 12px; }
