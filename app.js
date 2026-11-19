@@ -1409,8 +1409,7 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
         <button class="dock-btn" data-tip="Archive" data-archive>${ICONS.archive}
           ${state.archived.length ? `<span class="archive-count">${state.archived.length}</span>` : ""}
         </button>
-        <div class="dock-sep mobile-only"></div>
-        <button class="dock-btn mobile-only" data-dock-apps title="Shortcuts">${ICONS.shuffle}</button>
+
       </div>
 
       <!-- mobile only: the dock's shortcuts button pops these up above it -->
@@ -1850,7 +1849,7 @@ function colNode(key) {
       title: p.name,
       label: p.name,
       icon: `<span class="col-tile" style="--pa:${accent}">${escapeHtml(initials(p.name))}</span>`,
-      meta: st.over ? `<span class="col-over">${st.over}</span>` : (st.open ? String(st.open) : ""),
+      meta: st.open ? `${st.over ? `<span class="col-over-dot" title="${st.over} overdue"></span>` : ""}${st.open}` : "",
       folder: true,
       open: () => (window.location.hash = "#/p/" + rest),
       sections: [
@@ -2055,10 +2054,10 @@ function colTaskPreview(t, p, ref) {
     <div class="colp">
       <div class="colp-kicker">${escapeHtml(p.name)}${goal ? " › " + escapeHtml(goal.text) : ""}</div>
       <div class="colp-title ${t.done ? "is-done" : ""}">${escapeHtml(t.text)}</div>
-      <div class="colp-chips">${dueChipHtml(t)}${ownerChipHtml(t)}${t.done ? `<span class="meta-chip">✓ Done</span>` : ""}</div>
+      ${t.done ? `<div class="colp-chips"><span class="meta-chip">✓ Done</span></div>` : ""}
       <div class="colp-factlist">
         ${fact("Owner", escapeHtml(owner))}
-        ${fact("Due", t.due ? escapeHtml(dueLabel(t.due)) : "")}
+        ${fact("Due", t.due ? colTaskSub({ ...t, owner: "me" }).replace('class="col-sub"', 'class="colp-due"') : "")}
         ${fact("With", people.map((x) => escapeHtml(x.name)).join(", "))}
         ${fact("Added", t.createdAt ? escapeHtml(fmtDT(t.createdAt)) : "")}
         ${fact("Closed", t.done && t.closedAt ? escapeHtml(fmtDT(t.closedAt)) : "")}
@@ -2066,10 +2065,10 @@ function colTaskPreview(t, p, ref) {
       ${note ? `<div class="colp-note colp-note-sm">${noteBodyHtml(t.note)}</div>` : ""}
       ${t.link ? `<a class="colp-link" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">Link<span>${escapeHtml(t.link)}</span></a>` : ""}
       <div class="colp-actions">
-        <button class="btn btn-ghost btn-sm btn-danger-ghost" data-colp-delete>Delete</button>
+        <button class="btn btn-primary btn-sm" data-colp-toggle>${t.done ? "Reopen" : "Mark done"}</button>
         <button class="btn btn-ghost btn-sm" data-colp-edititem>Edit</button>
-        <button class="btn btn-ghost btn-sm" data-colp-toggle>${t.done ? "Reopen" : "Mark done"}</button>
-        <button class="btn btn-primary btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button>
+        <button class="btn btn-ghost btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button>
+        <button class="colp-delete" data-colp-delete>Delete</button>
       </div>
     </div>`;
 }
@@ -2110,21 +2109,36 @@ function validColPath() {
   return out;
 }
 
+/* one quiet line under a task: when it's due, and who has it */
+function colTaskSub(t) {
+  const parts = [];
+  if (t.due) {
+    const d = dueDelta(t.due);
+    const cls = t.done ? "" : d < 0 ? "sub-over" : d === 0 ? "sub-today" : d <= 2 ? "sub-soon" : "";
+    parts.push(`<span class="${cls}">${!t.done && d < 0 ? "Overdue · " : ""}${escapeHtml(dueLabel(t.due))}</span>`);
+  }
+  if (!isMine(t)) {
+    const per = personById(t.owner);
+    if (per) parts.push(`<span class="sub-owner" style="--pc:${per.color}">${escapeHtml(per.name.split(" ")[0])}</span>`);
+  }
+  return parts.length ? `<span class="col-sub">${parts.join("")}</span>` : "";
+}
+
 function colRowHtml(key, selected, depth) {
   const n = colNode(key);
   if (!n) return "";
   const lead = n.task
     ? `<button class="col-check ${n.done ? "done" : ""}" data-col-check="${escapeHtml(key)}" aria-label="${n.done ? "Reopen" : "Mark done"}"></button>`
     : n.icon || "";
-  const trail = n.task
-    ? `${dueChipHtml(n.task)}${ownerChipHtml(n.task)}`
-    : `${n.meta ? `<span class="col-meta">${n.meta}</span>` : ""}`;
+  const trail = n.task ? "" : `${n.meta ? `<span class="col-meta">${n.meta}</span>` : ""}`;
+  const sub = n.task ? colTaskSub(n.task) : "";
   return `
     <div class="col-row ${selected ? "selected" : ""} ${n.done ? "is-done" : ""} ${n.task ? "is-task" : ""}"
          data-col-key="${escapeHtml(key)}" data-col-depth="${depth}" tabindex="-1" role="option" aria-selected="${selected}">
       ${lead}
-      <span class="col-label">${escapeHtml(n.label)}</span>
-      <span class="col-trail">${trail}</span>
+      ${sub ? `<span class="col-text"><span class="col-label">${escapeHtml(n.label)}</span>${sub}</span>`
+            : `<span class="col-label">${escapeHtml(n.label)}</span>`}
+      ${trail ? `<span class="col-trail">${trail}</span>` : ""}
       ${colTarget(key) ? `<button class="col-more" data-col-more="${escapeHtml(key)}" aria-label="More actions" title="More">${MORE_SVG}</button>` : `<span class="col-more col-more-blank" aria-hidden="true"></span>`}
       ${n.folder ? `<span class="col-chev">${CHEVRON_R}</span>` : ""}
     </div>`;
@@ -2172,7 +2186,8 @@ function columnsHtml() {
     const ref = colSplit(last)[1];
     preview = colSpacePreview(containerByRef(ref), ref);
   }
-  if (preview) cols.push(`<div class="col col-preview" data-col="${depth}">${preview}</div>`);
+  if (!preview && !colPath.length && !IS_MOBILE) preview = colUpNextHtml();
+  if (preview) cols.push(`<div class="col col-preview ${colPath.length ? "" : "col-upnext"}" data-col="${depth}">${preview}</div>`);
 
   const crumbs = keys.map((k) => (colNode(k) || {}).title || (colNode(k) || {}).label || "");
   const backTitle = crumbs.length > 1 ? crumbs[crumbs.length - 2] : "";
@@ -2180,11 +2195,34 @@ function columnsHtml() {
   return `
     <div class="columns ${state.timebarHidden ? "" : "with-timebar"}" data-columns>
       <div class="cols-mbar">
-        ${colPath.length ? `<button class="cols-back" data-cols-back>&larr; <span>${escapeHtml(backTitle)}</span></button>` : ""}
+        ${colPath.length ? `<button class="cols-back" data-cols-back aria-label="Back to ${escapeHtml(backTitle)}"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg><span>${escapeHtml(backTitle.length > 14 ? "Back" : backTitle)}</span></button>` : ""}
         <span class="cols-mtitle">${escapeHtml(curTitle)}</span>
         ${last && colMenu(last).length ? `<button class="col-more cols-mmore" data-col-more="${escapeHtml(last)}" aria-label="More actions">${MORE_SVG}</button>` : ""}
       </div>
       <div class="cols-scroll" data-cols-scroll>${cols.join("")}</div>
+    </div>`;
+}
+
+/* nothing picked yet: what needs you next, across every space */
+function colUpNextHtml() {
+  const items = allTaskRefs()
+    .filter(({ task }) => !task.done && task.due && dueDelta(task.due) <= 7)
+    .sort((a, b) => a.task.due.localeCompare(b.task.due))
+    .slice(0, 8);
+  const d = new Date();
+  const rows = items.map(({ task, ref, space }) => {
+    const tail = [task.goalId ? `g:${ref}:${task.goalId}` : `o:${ref}`, `t:${ref}:${task.id}`];
+    return `<button class="upnext-row" data-upnext="${escapeHtml(ref)}" data-upnext-tail="${escapeHtml(tail.join("|"))}">
+      <span class="upnext-text">${escapeHtml(task.text)}</span>
+      <span class="upnext-space">${escapeHtml(space.node.name)}</span>
+      ${colTaskSub({ ...task, owner: "me" })}
+    </button>`;
+  }).join("");
+  return `
+    <div class="colp upnext">
+      <div class="colp-kicker">${escapeHtml(d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }))}</div>
+      <div class="colp-title">Up next</div>
+      ${rows ? `<div class="upnext-list">${rows}</div>` : `<p class="upnext-empty">Nothing due this week. Pick a space on the left to begin.</p>`}
     </div>`;
 }
 
@@ -2234,6 +2272,9 @@ function colToggleTask(key) {
 function wireColumns() {
   const root = app.querySelector("[data-columns]");
   if (!root) return;
+  root.querySelectorAll("[data-upnext]").forEach((btn) => {
+    btn.addEventListener("click", () => colRevealPath(btn.dataset.upnext, btn.dataset.upnextTail.split("|")));
+  });
   root.querySelectorAll("[data-col-key]").forEach((row) => {
     row.addEventListener("click", (e) => {
       if (e.target.closest("[data-col-check], [data-col-more], .col-rename")) return;
@@ -4451,7 +4492,7 @@ function wireTabContent(id, page) {
       });
     }
 
-    feed.querySelectorAll(".note-card").forEach((card) => {
+    feed.querySelectorAll(":scope > .note-card[data-note]").forEach((card) => {
       wireNoteCard(card);
       wireNoteFeed(card.querySelector("[data-nfeed]"), p.notesList.find((n) => n.id === card.dataset.note));
     });

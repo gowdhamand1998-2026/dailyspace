@@ -3816,3 +3816,101 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   .col-menu-item { padding: 11px 12px; font-size: 15px; }
   .col-rename { font-size: 16px; }
 }
+
+/* ============================================================
+   design pass (Nov 2026): quieter rows, one way to show counts,
+   a calmer timebar, and a phone layout that uses the whole screen
+   ============================================================ */
+
+/* task rows: title on top, due + owner as quiet text underneath */
+.col-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.col-text .col-label { flex: none; }
+.col-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; font-size: 11.5px; line-height: 1.35; color: var(--text-3); }
+.col-sub .sub-over { color: #f87171; }
+.col-sub .sub-today { color: #fbbf24; }
+.col-sub .sub-soon { color: #e5c07b; }
+.col-sub .sub-owner { display: inline-flex; align-items: center; gap: 5px; }
+.col-sub .sub-owner::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--pc, #888); }
+.col-active .col-row.selected .col-sub, .col-active .col-row.selected .col-sub span { color: rgba(255,255,255,.85); }
+
+/* counts look the same everywhere; overdue is a small red dot */
+.col-over-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: #f87171; vertical-align: 1.5px; }
+
+/* preview: one primary action, delete stays quiet */
+.colp-actions { align-items: center; }
+.colp-delete { margin-left: auto; height: 30px; padding: 0 6px; font-size: 12.5px; color: var(--text-3); border-radius: 7px; }
+.colp-delete:hover { color: #f87171; }
+.colp-due { font-weight: 500; }
+.colp-due .sub-over { color: #f87171; }
+.colp-due .sub-today { color: #fbbf24; }
+
+/* empty home → "Up next" */
+.col-upnext { flex: 1 1 auto; }
+.upnext { max-width: 560px; padding-top: 34px; }
+.upnext .colp-title { font-size: 26px; margin-bottom: 16px; }
+.upnext-list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.upnext-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; align-items: baseline;
+  padding: 11px 4px; border-bottom: 1px solid var(--line); text-align: left; border-radius: 0;
+  transition: background .15s;
+}
+.upnext-row:hover { background: rgba(255,255,255,.035); }
+.upnext-text { font-size: 14px; color: var(--text); }
+.upnext-space { font-size: 12px; color: var(--text-3); text-align: right; }
+.upnext-row .col-sub { grid-column: 1 / -1; }
+.upnext-empty { font-size: 14px; color: var(--text-3); }
+
+/* note sections: plain timestamps, no boxes */
+.stamp-part { border: none; padding: 0; }
+.stamp-part + .stamp-part::before { content: "·"; margin-right: 6px; }
+.nsec-tag { background: none; padding: 0; height: auto; color: var(--text-3); font-weight: 500; }
+.nsec-tag::after { content: "\00a0·"; }
+.nfeed .note-add, .crow-add.note-add {
+  border-style: solid; border-color: var(--line); color: var(--text-2); background: rgba(255,255,255,.02);
+}
+
+/* timebar: one calm colour instead of a neon gradient */
+.timebar-fill { background: linear-gradient(90deg, rgba(222,205,170,.55), #e3d7bf); box-shadow: none; }
+.tb-mini-fill { background: #e3d7bf; }
+
+/* ---------- phones ---------- */
+@media (max-width: 700px) {
+  .timebar { display: none; }
+  .columns, .columns.with-timebar {
+    top: 44px; left: 0; right: 0; bottom: 0;
+    border-radius: 0; background: transparent; box-shadow: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .cols-mbar { height: 48px; padding: 0 10px 0 4px; border-bottom-color: rgba(255,255,255,.06); }
+  .cols-back { max-width: 40%; padding: 0 6px 0 2px; gap: 0; font-size: 15px; }
+  .cols-back svg { flex-shrink: 0; }
+  .cols-mtitle { font-size: 16px; }
+  .col-body { padding: 4px 10px 110px; }
+  .col-preview { padding-bottom: 110px; }
+  .col-sub { font-size: 12.5px; }
+
+  /* dock → a labelled tab bar */
+  .dock {
+    left: 50%; transform: translateX(-50%); bottom: max(10px, env(safe-area-inset-bottom));
+    padding: 6px 8px; gap: 2px; border-radius: 22px;
+  }
+  .dock-sep { display: none; }
+  .dock-btn { width: 66px; height: 50px; flex-direction: column; gap: 3px; border-radius: 14px; }
+  .dock-btn:hover { transform: none; }
+  .dock-btn::after {
+    position: static; transform: none; opacity: 1; background: none; box-shadow: none;
+    padding: 0; font-size: 10.5px; color: var(--text-3);
+  }
+
+  /* forms slide up from the bottom, thumb-reachable */
+  .window-backdrop:has(.sheet) { align-items: flex-end; padding: 0; }
+  .window-backdrop .sheet {
+    width: 100%; border-radius: 20px 20px 0 0;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+    animation: sheet-up .28s var(--ease) both;
+  }
+  @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .upnext { padding-top: 8px; }
+  .colp-delete { margin-left: 0; width: 100%; height: 40px; }
+}
