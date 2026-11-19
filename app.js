@@ -2106,22 +2106,16 @@ function colSpaceStats(p) {
     </div>`;
 }
 
-/* top of a goal's column: progress, owner, due and the goal's actions */
+const ACT_CHECK = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
+/* top of a goal's column: when it's due, and the goal's actions */
 function colGoalHeader(g, subs) {
-  const done = subs.filter((t) => t.done).length;
-  const pct = subs.length ? Math.round((done / subs.length) * 100) : 0;
-  const owner = isMine(g) ? "Me" : (personById(g.owner) || {}).name || "Me";
   const due = g.due ? colTaskSub({ ...g, owner: "me" }).replace('class="col-sub"', 'class="colp-due"') : "No due date";
   return `<div class="col-ghead">
-      <div class="ov-progress">
-        <span class="ov-bar ov-bar-lg"><span style="width:${pct}%"></span></span>
-        <span>${subs.length ? `${done} of ${subs.length} done` : "No subtasks yet"}</span>
-      </div>
-      <div class="col-gfacts"><span>${escapeHtml(owner)}</span><span>${due}</span></div>
-      <div class="colp-actions">
-        <button class="btn btn-primary btn-sm" data-ov-goal-toggle>${g.done ? "Reopen goal" : "Mark goal done"}</button>
-        <button class="btn btn-ghost btn-sm" data-ov-goal-edit>Edit</button>
-        <button class="colp-delete" data-ov-goal-delete>Delete</button>
+      <div class="col-gfacts"><span>${g.due ? "Due " + due : due}</span></div>
+      <div class="col-acts">
+        <button class="col-act" data-ov-goal-toggle>${ACT_CHECK}${g.done ? "Reopen" : "Mark done"}</button>
+        <button class="col-act" data-ov-goal-edit>Edit</button>
+        <button class="col-act col-act-quiet" data-ov-goal-delete>Delete</button>
       </div>
     </div>`;
 }
@@ -2131,24 +2125,20 @@ function colTaskInline(key) {
   const n = colNode(key);
   if (!n || !n.task) return "";
   const t = n.task, p = containerByRef(n.ref);
-  const owner = isMine(t) ? "Me" : (personById(t.owner) || {}).name || "Me";
-  const people = (t.people || []).map((id) => personById(id)).filter(Boolean);
   const note = plainText(t.note);
   const fact = (k, v) => v ? `<div class="colp-fact"><span>${k}</span><b>${v}</b></div>` : "";
   return `<div class="col-inline">
       <div class="colp-factlist">
-        ${fact("Owner", escapeHtml(owner))}
         ${fact("Due", t.due ? colTaskSub({ ...t, owner: "me" }).replace('class="col-sub"', 'class="colp-due"') : "")}
-        ${fact("With", people.map((x) => escapeHtml(x.name)).join(", "))}
         ${fact("Closed", t.done && t.closedAt ? escapeHtml(fmtDT(t.closedAt)) : "")}
       </div>
       ${note ? `<div class="colp-note colp-note-sm">${noteBodyHtml(t.note)}</div>` : ""}
       ${t.link ? `<a class="colp-link" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">Link<span>${escapeHtml(t.link)}</span></a>` : ""}
-      <div class="colp-actions">
-        <button class="btn btn-primary btn-sm" data-colp-toggle>${t.done ? "Reopen" : "Mark done"}</button>
-        <button class="btn btn-ghost btn-sm" data-colp-edititem>Edit</button>
-        <button class="btn btn-ghost btn-sm" data-colp-open>Open in ${escapeHtml(p ? p.name : "space")}</button>
-        <button class="colp-delete" data-colp-delete>Delete</button>
+      <div class="col-acts">
+        <button class="col-act" data-colp-toggle>${ACT_CHECK}${t.done ? "Reopen" : "Mark done"}</button>
+        <button class="col-act" data-colp-edititem>Edit</button>
+        <button class="col-act" data-colp-open>Open in ${escapeHtml(p ? p.name : "space")}</button>
+        <button class="col-act col-act-quiet" data-colp-delete>Delete</button>
       </div>
       ${t.createdAt ? `<div class="colp-foot">Added ${escapeHtml(shortDay(t.createdAt))}</div>` : ""}
     </div>`;
@@ -2177,10 +2167,6 @@ function colTaskSub(t, spaceName) {
     const d = dueDelta(t.due);
     const cls = t.done ? "" : d < 0 ? "sub-over" : d === 0 ? "sub-today" : d <= 2 ? "sub-soon" : "";
     parts.push(`<span class="${cls}">${!t.done && d < 0 ? "Overdue · " : ""}${escapeHtml(dueLabel(t.due))}</span>`);
-  }
-  if (!isMine(t)) {
-    const per = personById(t.owner);
-    if (per) parts.push(`<span class="sub-owner" style="--pc:${per.color}">${escapeHtml(per.name.split(" ")[0])}</span>`);
   }
   return parts.length ? `<span class="col-sub">${parts.join("")}</span>` : "";
 }

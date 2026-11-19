@@ -4087,3 +4087,28 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 }
 .col-add:not(.col-toggle):hover { color: var(--text); background: rgba(255,255,255,.11); }
 .col-add:not(.col-toggle) span { max-width: none; opacity: 1; margin-left: 0; overflow: visible; }
+
+/* ============================================================
+   Columns, pass 7: one small button style for every action,
+   a little more air under headings and between rows
+   ============================================================ */
+.col-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.col-act {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 10px; border-radius: 7px;
+  font-size: 12px; font-weight: 500; color: var(--text-2);
+  background: rgba(255,255,255,.06); transition: background .15s, color .15s;
+}
+.col-act:hover { color: var(--text); background: rgba(255,255,255,.11); }
+.col-act svg { width: 13px; height: 13px; }
+.col-act-quiet { background: transparent; color: var(--text-3); }
+.col-act-quiet:hover { color: #f87171; background: rgba(248,113,113,.08); }
+.col-add:not(.col-toggle) { height: 26px; padding: 0 10px 0 8px; font-size: 12px; }
+
+.col-gfacts { margin-top: 2px; }
+.col-ghead { padding: 6px 8px 8px; }
+.col-inline .col-acts { margin-top: 12px; }
+
+/* air: below every section heading, and a hair between rows */
+.col-section { padding-bottom: 8px; }
+.col-body .col-row + .col-row { margin-top: 2px; }
