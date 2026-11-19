@@ -4036,7 +4036,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
    ============================================================ */
 @media (min-width: 701px) {
   /* a space or goal that's open beside others keeps a comfortable width */
-  .cols-scroll > .col:not([data-col="0"]):not(.col-preview):not(.col-fill) { flex-basis: 360px; }
+  .cols-scroll > .col:not([data-col="0"]):not(.col-preview):not(.col-fill) { flex-basis: 420px; }
   /* the last column fills, but its content stays a readable width and long names wrap */
   .col-fill .col-body > * { max-width: 600px; }
   .col-fill .col-label { white-space: normal; }
@@ -4130,3 +4130,19 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .lk-card .col-more { visibility: hidden; flex-shrink: 0; }
 .lk-card:hover .col-more, .lk-card:focus-within .col-more, .lk-card .col-more.open { visibility: visible; }
 @media (hover: none) { .lk-card .col-more { visibility: visible; } }
+
+/* ============================================================
+   Columns, pass 10: tasks in a goal as a quiet table
+   ============================================================ */
+.col-dates { display: inline-flex; flex-shrink: 0; margin-left: auto; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.col-dates > span { width: 64px; text-align: right; }
+.col-row .col-dates { align-self: center; }
+.col-active .col-row.selected .col-dates { color: rgba(255,255,255,.8); }
+.col-thead {
+  display: flex; align-items: center; gap: 9px; padding: 2px 8px 6px 39px;
+  font-size: 11px; color: var(--text-3); border-bottom: 1px solid var(--line); margin-bottom: 4px;
+}
+.col-thead > span:first-child { flex: 1; }
+.col-thead .col-dates { font-size: 11px; }
+.col-thead .col-more { visibility: hidden; }
+.col-gfacts span + span::before { content: "·"; margin-right: 14px; color: var(--text-3); }

@@ -1853,7 +1853,6 @@ function colNode(key) {
       icon: `<span class="col-tile" style="--pa:${accent}">${escapeHtml(initials(p.name))}</span>`,
       meta: st.open ? `${st.over ? `<span class="col-over-dot" title="${st.over} overdue"></span>` : ""}${st.open}` : "",
       folder: true,
-      open: () => (window.location.hash = "#/p/" + rest),
       header: () => colSpaceStats(p),
       sections: [
         ...(p.tracker ? [{ title: p.tracker.name, keys: subs.map((c) => "p:" + rest + "~" + c.id) }] : []),
@@ -1896,7 +1895,6 @@ function colNode(key) {
       others: !g,
       bigTitle: true,
       folder: true,
-      open: () => openSpaceTab(ref, "work"),
       header: () => g ? colGoalHeader(g, subs) : "",
       sections: [{
         title: g ? "Subtasks" : "Tasks",
@@ -1956,7 +1954,6 @@ function colNode(key) {
     if (!t) return null;
     return {
       label: t.text, task: t, ref, done: t.done,
-      open: () => openSpaceTab(ref, "work"),
       preview: () => colTaskPreview(t, p, ref),
     };
   }
@@ -1971,14 +1968,10 @@ function colNode(key) {
       note: n,
       icon: `<span class="col-glyph">${COL_ICONS.note}</span>`,
       meta: "",
-      open: () => openSpaceTab(ref, "notes"),
       preview: () => `
         <div class="colp">
           <div class="colp-kicker">Note · ${escapeHtml(p.name)}</div>
           ${noteFeedHtml(n)}
-          <div class="colp-actions">
-            <button class="btn btn-ghost btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button>
-          </div>
         </div>`,
       removeNote: () => { p.notesList = p.notesList.filter((x) => x.id !== nid); },
     };
@@ -2097,7 +2090,6 @@ function colTaskPreview(t, p, ref) {
       <div class="colp-actions">
         <button class="btn btn-primary btn-sm" data-colp-toggle>${t.done ? "Reopen" : "Mark done"}</button>
         <button class="btn btn-ghost btn-sm" data-colp-edititem>Edit</button>
-        <button class="btn btn-ghost btn-sm" data-colp-open>Open in ${escapeHtml(p.name)}</button>
         <button class="colp-delete" data-colp-delete>Delete</button>
       </div>
       ${t.createdAt ? `<div class="colp-foot">Added ${escapeHtml(shortDay(t.createdAt))}</div>` : ""}
@@ -2126,7 +2118,7 @@ const ACT_CHECK = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" s
 function colGoalHeader(g, subs) {
   const due = g.due ? colTaskSub({ ...g, owner: "me" }).replace('class="col-sub"', 'class="colp-due"') : "No due date";
   return `<div class="col-ghead">
-      <div class="col-gfacts"><span>${g.due ? "Due " + due : due}</span></div>
+      <div class="col-gfacts"><span>${g.due ? "Due " + due : due}</span>${g.createdAt ? `<span>Added ${escapeHtml(shortDay(g.createdAt))}</span>` : ""}${g.done && g.closedAt ? `<span>Done ${escapeHtml(shortDay(g.closedAt))}</span>` : ""}</div>
       <div class="col-acts">
         <button class="col-act" data-ov-goal-toggle>${ACT_CHECK}${g.done ? "Reopen" : "Mark done"}</button>
         <button class="col-act" data-ov-goal-edit>Edit</button>
@@ -2181,10 +2173,8 @@ function colTaskInline(key) {
       <div class="col-acts">
         <button class="col-act" data-colp-toggle>${ACT_CHECK}${t.done ? "Reopen" : "Mark done"}</button>
         <button class="col-act" data-colp-edititem>Edit</button>
-        <button class="col-act" data-colp-open>Open in ${escapeHtml(p ? p.name : "space")}</button>
         <button class="col-act col-act-quiet" data-colp-delete>Delete</button>
       </div>
-      ${t.createdAt ? `<div class="colp-foot">Added ${escapeHtml(shortDay(t.createdAt))}</div>` : ""}
     </div>`;
 }
 
@@ -2215,7 +2205,7 @@ function colTaskSub(t, spaceName) {
   return parts.length ? `<span class="col-sub">${parts.join("")}</span>` : "";
 }
 
-function colRowHtml(key, selected, depth, showSpace) {
+function colRowHtml(key, selected, depth, showSpace, dates) {
   const n = colNode(key);
   if (!n) return "";
   const lead = n.task
@@ -2230,6 +2220,7 @@ function colRowHtml(key, selected, depth, showSpace) {
       ${sub ? `<span class="col-text"><span class="col-label">${escapeHtml(n.label)}</span>${sub}</span>`
             : `<span class="col-label">${escapeHtml(n.label)}</span>`}
       ${trail ? `<span class="col-trail">${trail}</span>` : ""}
+      ${dates && n.task ? `<span class="col-dates"><span>${escapeHtml(shortDay(n.task.createdAt)) || "–"}</span><span>${n.task.done && n.task.closedAt ? escapeHtml(shortDay(n.task.closedAt)) : "–"}</span></span>` : ""}
       ${colTarget(key) ? `<button class="col-more" data-col-more="${escapeHtml(key)}" aria-label="More actions" title="More">${MORE_SVG}</button>` : `<span class="col-more col-more-blank" aria-hidden="true"></span>`}
       ${n.folder ? `<span class="col-chev">${CHEVRON_R}</span>` : ""}
     </div>`;
@@ -2249,6 +2240,7 @@ function columnsHtml() {
   while (node && node.sections) {
     const sel = colPath[depth];
     const big = node.bigTitle && !IS_MOBILE;
+    const table = !IS_MOBILE && /^(g|o)$/.test(colSplit(keys[depth])[0]);
     const tAct = node.titleAction != null ? node.sections[node.titleAction].action : null;
     const body = node.body ? node.body(keys[depth]) : node.sections.map((s, si) => (s.keys.length || s.action) ? `
       ${s.divider ? `<div class="col-sep"></div>` : ""}
@@ -2256,7 +2248,8 @@ function columnsHtml() {
         <span>${escapeHtml(s.title || "")}</span>
         ${s.action ? `<button class="col-add ${s.action.toggle ? "col-toggle" : ""}" data-col-action="${escapeHtml(keys[depth])}|${si}" title="${escapeHtml(s.action.label)}" aria-label="${escapeHtml(s.action.label)}">${s.action.toggle ? "" : ICONS.plus}<span>${escapeHtml(s.action.label)}</span></button>` : ""}
       </div>` : ""}
-      ${s.keys.map((k) => colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]))
+      ${table && s.keys.length ? `<div class="col-thead"><span>Task</span><span class="col-dates"><span>Added</span><span>Done</span></span><span class="col-more col-more-blank"></span></div>` : ""}
+      ${s.keys.map((k) => colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]), table)
         + (inlineAt === depth && k === sel ? (k.startsWith("pl:") ? colLinkInline(k) : colTaskInline(k)) : "")).join("")}
       ${!s.keys.length && s.empty ? `<div class="col-hint">${escapeHtml(s.empty)}</div>` : ""}
     ` : "").join("");
@@ -2265,7 +2258,6 @@ function columnsHtml() {
         <div class="col-head"><span>${big ? "" : escapeHtml(node.title || "")}</span>
           <span class="col-head-actions">
             ${depth > 0 && colMenu(keys[depth]).length ? `<button class="col-more col-more-head" data-col-more="${escapeHtml(keys[depth])}" aria-label="More actions" title="More">${MORE_SVG}</button>` : ""}
-            ${depth > 0 && node.open ? `<button class="col-head-open" data-col-open="${escapeHtml(keys[depth])}" title="Open">Open ${CHEVRON_R}</button>` : ""}
           </span>
         </div>
         <div class="col-body">${big || tAct ? `<div class="col-bigtitle">${big ? `<h2>${escapeHtml(node.title || "")}</h2>` : "<span></span>"}${tAct ? `<button class="col-add" data-col-action="${escapeHtml(keys[depth])}|${node.titleAction}">${ICONS.plus}<span>${escapeHtml(tAct.label)}</span></button>` : ""}</div>` : ""}${node.header ? node.header() : ""}${body.trim() ? body : `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`}</div>
