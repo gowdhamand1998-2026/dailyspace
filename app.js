@@ -1857,12 +1857,6 @@ function colNode(key) {
       header: () => colSpaceStats(p),
       sections: [
         ...(p.tracker ? [{ title: p.tracker.name, keys: subs.map((c) => "p:" + rest + "~" + c.id) }] : []),
-        { title: "Goals", keys: [...goals.map((g) => "g:" + rest + ":" + g.id), "o:" + rest],
-          action: { label: "Add goal", run: () => openItemSheet({ ref: rest, kind: "goal" }) } },
-        ...(doneGoals.length ? [{ title: `Completed · ${doneGoals.length}`, quiet: true,
-          keys: colShowDone[rest] ? doneGoals.map((g) => "g:" + rest + ":" + g.id) : [],
-          action: { label: colShowDone[rest] ? "Hide" : "Show", toggle: true,
-            run: () => { colShowDone[rest] = !colShowDone[rest]; redrawColumns(); } } }] : []),
         { title: "Notes", keys: p.notesList.map((n) => "n:" + rest + ":" + n.id),
           empty: "No notes yet",
           action: { label: "Add note", run: () => {
@@ -1874,7 +1868,13 @@ function colNode(key) {
             const ed = app.querySelector('.col-preview [data-nsec="root"] .note-card-text');
             if (ed) ed.focus();
           } } },
-        { title: "", divider: true, keys: ["lk:" + rest] },
+        { title: "", divider: true, tight: true, keys: ["lk:" + rest] },
+        { title: "Goals", keys: [...goals.map((g) => "g:" + rest + ":" + g.id), "o:" + rest],
+          action: { label: "Add goal", run: () => openItemSheet({ ref: rest, kind: "goal" }) } },
+        ...(doneGoals.length ? [{ title: `Completed · ${doneGoals.length}`, quiet: true,
+          keys: colShowDone[rest] ? doneGoals.map((g) => "g:" + rest + ":" + g.id) : [],
+          action: { label: colShowDone[rest] ? "Hide" : "Show", toggle: true,
+            run: () => { colShowDone[rest] = !colShowDone[rest]; redrawColumns(); } } }] : []),
       ],
     };
   }
@@ -1894,6 +1894,7 @@ function colNode(key) {
       icon: `<span class="col-glyph ${g ? "col-goal" : "col-goal col-goal-others"}">${COL_ICONS.goal}</span>`,
       meta: g && subs.length ? `<span class="col-frac" title="${doneN} of ${subs.length} done">${doneN}/${subs.length}</span>` : (open ? String(open) : ""),
       others: !g,
+      bigTitle: true,
       folder: true,
       open: () => openSpaceTab(ref, "work"),
       header: () => g ? colGoalHeader(g, subs) : "",
@@ -1913,6 +1914,9 @@ function colNode(key) {
       icon: `<span class="col-glyph">${COL_ICONS.links}</span>`,
       meta: p.links.length ? String(p.links.length) : "",
       folder: true,
+      bigTitle: true,
+      titleAction: 0,
+      body: (key) => colLinkCards(p, rest),
       sections: [{ title: "", keys: p.links.map((l) => "pl:" + rest + ":" + l.id),
         empty: "No links yet",
         action: { label: "Add link", run: () => openLinkSheet({ ref: rest }) } }],
@@ -2131,6 +2135,21 @@ function colGoalHeader(g, subs) {
     </div>`;
 }
 
+/* a space's links as cards */
+function colLinkCards(p, ref) {
+  if (!p.links.length) return `<div class="col-hint">No links yet</div>`;
+  return `<div class="lk-grid">${p.links.map((l) => {
+    let host = "";
+    try { host = new URL(l.url).hostname.replace(/^www\./, ""); } catch {}
+    const key = "pl:" + ref + ":" + l.id;
+    return `<div class="lk-card" data-lk-open="${escapeHtml(l.url)}" title="${escapeHtml(l.url)}" tabindex="0">
+        <span class="col-tile col-tile-link"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>
+        <span class="lk-text"><span class="lk-name">${escapeHtml(l.name || host || "Link")}</span><span class="lk-host">${escapeHtml(host)}</span></span>
+        <button class="col-more" data-col-more="${escapeHtml(key)}" aria-label="More actions" title="Edit or remove">${MORE_SVG}</button>
+      </div>`;
+  }).join("")}</div>`;
+}
+
 /* a picked link opens right under its row too */
 function colLinkInline(key) {
   const t = colTarget(key);
@@ -2229,7 +2248,9 @@ function columnsHtml() {
     || (/^pl$/.test(colSplit(lastKey)[0]) && /^lk$/.test(colSplit(colPath[colPath.length - 2])[0]))) ? colPath.length - 1 : -1;
   while (node && node.sections) {
     const sel = colPath[depth];
-    const body = node.sections.map((s, si) => (s.keys.length || s.action) ? `
+    const big = node.bigTitle && !IS_MOBILE;
+    const tAct = node.titleAction != null ? node.sections[node.titleAction].action : null;
+    const body = node.body ? node.body(keys[depth]) : node.sections.map((s, si) => (s.keys.length || s.action) ? `
       ${s.divider ? `<div class="col-sep"></div>` : ""}
       ${s.title || s.action ? `<div class="col-section ${s.quiet ? "col-section-quiet" : ""}">
         <span>${escapeHtml(s.title || "")}</span>
@@ -2241,13 +2262,13 @@ function columnsHtml() {
     ` : "").join("");
     cols.push(`
       <div class="col ${depth === colPath.length - 1 ? "col-active" : ""}" data-col="${depth}" data-kind="${escapeHtml(colSplit(keys[depth])[0])}" role="listbox" aria-label="${escapeHtml(node.title || "")}">
-        <div class="col-head"><span>${escapeHtml(node.title || "")}</span>
+        <div class="col-head"><span>${big ? "" : escapeHtml(node.title || "")}</span>
           <span class="col-head-actions">
             ${depth > 0 && colMenu(keys[depth]).length ? `<button class="col-more col-more-head" data-col-more="${escapeHtml(keys[depth])}" aria-label="More actions" title="More">${MORE_SVG}</button>` : ""}
             ${depth > 0 && node.open ? `<button class="col-head-open" data-col-open="${escapeHtml(keys[depth])}" title="Open">Open ${CHEVRON_R}</button>` : ""}
           </span>
         </div>
-        <div class="col-body">${node.header ? node.header() : ""}${body.trim() ? body : `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`}</div>
+        <div class="col-body">${big || tAct ? `<div class="col-bigtitle">${big ? `<h2>${escapeHtml(node.title || "")}</h2>` : "<span></span>"}${tAct ? `<button class="col-add" data-col-action="${escapeHtml(keys[depth])}|${node.titleAction}">${ICONS.plus}<span>${escapeHtml(tAct.label)}</span></button>` : ""}</div>` : ""}${node.header ? node.header() : ""}${body.trim() ? body : `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`}</div>
       </div>`);
     if (!sel) break;
     const next = colNode(sel);
@@ -2374,6 +2395,11 @@ function wireColumns() {
     root.classList.remove("cols-rail");
     if (colPath.length >= 2 && scroller.scrollWidth > scroller.clientWidth + 4) root.classList.add("cols-rail");
   }
+  root.querySelectorAll("[data-lk-open]").forEach((card) => {
+    const go = () => window.open(card.dataset.lkOpen, "_blank", "noopener");
+    card.addEventListener("click", (e) => { if (!e.target.closest("[data-col-more]")) go(); });
+    card.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  });
   root.querySelectorAll("[data-upnext]").forEach((btn) => {
     btn.addEventListener("click", () => colRevealPath(btn.dataset.upnext, btn.dataset.upnextTail.split("|")));
   });
