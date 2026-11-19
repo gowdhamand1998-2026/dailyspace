@@ -4146,3 +4146,26 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .col-thead .col-dates { font-size: 11px; }
 .col-thead .col-more { visibility: hidden; }
 .col-gfacts span + span::before { content: "·"; margin-right: 14px; color: var(--text-3); }
+
+/* an opened task (or link) is one soft card: a light tint over the row and its details */
+.col-active .col-row.selected:has(+ .col-inline),
+.col-row.selected:has(+ .col-inline) {
+  background: rgba(255,255,255,.06); border-radius: 10px 10px 0 0;
+}
+.col-row.selected:has(+ .col-inline) .col-dates,
+.col-row.selected:has(+ .col-inline) .col-more { color: var(--text-3); }
+.col-row.selected:has(+ .col-inline) .col-more:hover { color: var(--text); }
+.col-row.selected:has(+ .col-inline) .col-check { border-color: var(--text-3); }
+.col-inline {
+  margin: 0 0 8px; padding: 6px 14px 12px 39px; border-left: none;
+  background: rgba(255,255,255,.06); border-radius: 0 0 10px 10px;
+}
+.col-inline .col-acts { margin-top: 0; }
+.col-inline > :first-child { margin-top: 0; }
+.col-inline .colp-note { margin-top: 2px; }
+.col-active .col-row.selected:has(+ .col-inline) .col-sub,
+.col-active .col-row.selected:has(+ .col-inline) .col-sub span { color: var(--text-3); }
+.col-active .col-row.selected:has(+ .col-inline) .col-sub .sub-over { color: #f87171; }
+.col-active .col-row.selected:has(+ .col-inline) .col-sub .sub-today { color: #fbbf24; }
+.col-active .col-row.selected:has(+ .col-inline) .col-sub .sub-soon { color: #e5c07b; }
+.col-fill .col-body > .col-inline { max-width: 600px; }

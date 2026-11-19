@@ -2162,12 +2162,7 @@ function colTaskInline(key) {
   if (!n || !n.task) return "";
   const t = n.task, p = containerByRef(n.ref);
   const note = plainText(t.note);
-  const fact = (k, v) => v ? `<div class="colp-fact"><span>${k}</span><b>${v}</b></div>` : "";
   return `<div class="col-inline">
-      <div class="colp-factlist">
-        ${fact("Due", t.due ? colTaskSub({ ...t, owner: "me" }).replace('class="col-sub"', 'class="colp-due"') : "")}
-        ${fact("Closed", t.done && t.closedAt ? escapeHtml(fmtDT(t.closedAt)) : "")}
-      </div>
       ${note ? `<div class="colp-note colp-note-sm">${noteBodyHtml(t.note)}</div>` : ""}
       ${t.link ? `<a class="colp-link" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">Link<span>${escapeHtml(t.link)}</span></a>` : ""}
       <div class="col-acts">
