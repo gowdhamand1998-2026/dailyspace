@@ -4231,3 +4231,8 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .col-tile-folder svg { color: color-mix(in srgb, var(--pa, #999) 55%, #c8c8c8); }
 .col-active .col-row.selected .col-tile-folder { background: rgba(255,255,255,.18); }
 .col-active .col-row.selected .col-tile-folder svg { color: #fff; }
+
+/* a folder (or collection) is a narrow column, the same width as Home */
+@media (min-width: 701px) {
+  .cols-scroll > .col.col-folder:not([data-col="0"]):not(.col-preview):not(.col-fill) { flex-basis: 300px; }
+}
