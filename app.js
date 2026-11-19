@@ -1831,8 +1831,10 @@ function colNode(key) {
     return {
       title: "Home",
       sections: [
-        { title: "Spaces", keys: spaces.map((p) => "p:" + p.id) },
-        { title: "Collections", keys: cols.map((c) => "c:" + c.id) },
+        { title: "Spaces", keys: spaces.map((p) => "p:" + p.id),
+          action: { label: "Add space", run: () => showNewProjectModal() } },
+        { title: "Collections", keys: cols.map((c) => "c:" + c.id),
+          action: { label: "Add collection", run: () => showCollectionComposer(null) } },
         { title: "", divider: true, keys: ["links"] },
         { title: "Lists", keys: [...Object.keys(WIDGETS).map((k) => "w:" + k), "people"] },
       ],
