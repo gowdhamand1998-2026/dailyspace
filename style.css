@@ -4169,3 +4169,8 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .col-active .col-row.selected:has(+ .col-inline) .col-sub .sub-today { color: #fbbf24; }
 .col-active .col-row.selected:has(+ .col-inline) .col-sub .sub-soon { color: #e5c07b; }
 .col-fill .col-body > .col-inline { max-width: 600px; }
+
+/* table: labels and values share one centre line, ··· sits level with them */
+.col-dates > span { text-align: center; }
+.col-thead { padding-right: 6px; }
+.col-row.is-task:has(.col-dates) .col-more { align-self: center; }
