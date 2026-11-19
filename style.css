@@ -4203,3 +4203,14 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 /* a space's links on the right */
 .colp-links { max-width: 600px; padding-top: 16px; }
 .colp-links .col-bigtitle { padding-left: 8px; }
+
+/* remove from collection: a small × that shows on hover */
+.col-x {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 6px; color: var(--text-3); visibility: hidden;
+}
+.col-row:hover .col-x, .col-row.selected .col-x, .col-x:focus-visible { visibility: visible; }
+.col-x:hover { color: #f87171; background: rgba(248,113,113,.1); }
+.col-active .col-row.selected .col-x { color: rgba(255,255,255,.85); }
+@media (hover: none) { .col-x { visibility: visible; } }
+.col-bigtitle + .col-ghead .col-acts { margin-top: 2px; }

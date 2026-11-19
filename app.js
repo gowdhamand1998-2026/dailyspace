@@ -2002,8 +2002,13 @@ function colNode(key) {
       title: c.name, label: c.name,
       icon: `<span class="col-glyph col-coll">${COL_ICONS.folder}</span>`,
       meta: String(c.items.length), folder: true,
-      open: () => (window.location.hash = "#/c/" + c.id),
-      emptyText: "Empty collection",
+      bigTitle: true,
+      collection: c.id,
+      header: () => `<div class="col-ghead"><div class="col-acts">
+          <button class="col-act" data-coll-rename="${escapeHtml(c.id)}">Rename</button>
+          <button class="col-act col-act-quiet" data-coll-delete="${escapeHtml(c.id)}">Delete collection</button>
+        </div></div>`,
+      emptyText: "Nothing in this collection yet",
       sections: [{ title: "", keys: c.items
         .filter((it) => it.type === "project" ? getProject(it.id) : state.links.some((l) => l.id === it.id))
         .map((it) => (it.type === "project" ? "p:" : "l:") + it.id) }],
@@ -2231,7 +2236,7 @@ function colTaskSub(t, spaceName) {
   return parts.length ? `<span class="col-sub">${parts.join("")}</span>` : "";
 }
 
-function colRowHtml(key, selected, depth, showSpace, dates) {
+function colRowHtml(key, selected, depth, showSpace, dates, collId) {
   const n = colNode(key);
   if (!n) return "";
   const lead = n.task
@@ -2247,6 +2252,7 @@ function colRowHtml(key, selected, depth, showSpace, dates) {
             : `<span class="col-label">${escapeHtml(n.label)}</span>`}
       ${trail ? `<span class="col-trail">${trail}</span>` : ""}
       ${dates && n.task ? `<span class="col-dates"><span>${escapeHtml(shortDay(n.task.createdAt)) || "–"}</span><span>${n.task.done && n.task.closedAt ? escapeHtml(shortDay(n.task.closedAt)) : "–"}</span></span>` : ""}
+      ${collId ? `<button class="col-x" data-coll-remove="${escapeHtml(collId)}|${escapeHtml(key)}" aria-label="Remove from collection" title="Remove from collection">${X_SVG}</button>` : ""}
       ${colTarget(key) ? `<button class="col-more" data-col-more="${escapeHtml(key)}" aria-label="More actions" title="More">${MORE_SVG}</button>` : `<span class="col-more col-more-blank" aria-hidden="true"></span>`}
       ${n.folder ? `<span class="col-chev">${CHEVRON_R}</span>` : ""}
     </div>`;
@@ -2275,7 +2281,7 @@ function columnsHtml() {
         ${s.action ? `<button class="col-add ${s.action.toggle ? "col-toggle" : ""}" data-col-action="${escapeHtml(keys[depth])}|${si}" title="${escapeHtml(s.action.label)}" aria-label="${escapeHtml(s.action.label)}">${s.action.toggle ? "" : ICONS.plus}<span>${escapeHtml(s.action.label)}</span></button>` : ""}
       </div>` : ""}
       ${table && s.keys.length ? `<div class="col-thead"><span>Task</span><span class="col-dates"><span>Added</span><span>Done</span></span><span class="col-more col-more-blank"></span></div>` : ""}
-      ${s.keys.map((k) => colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]), table)
+      ${s.keys.map((k) => colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]), table, node.collection)
         + (inlineAt === depth && k === sel ? (k.startsWith("pl:") ? colLinkInline(k) : colTaskInline(k)) : "")).join("")}
       ${!s.keys.length && s.empty ? `<div class="col-hint">${escapeHtml(s.empty)}</div>` : ""}
     ` : "").join("");
@@ -2423,6 +2429,13 @@ function wireColumns() {
     const right = scroller.querySelector(".col-fill, .col-preview");
     if (colPath.length >= 2 && (scroller.scrollWidth > scroller.clientWidth + 4 || (right && right.clientWidth < 520))) root.classList.add("cols-rail");
   }
+  root.querySelectorAll("[data-coll-remove]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const [cid, ...rest] = b.dataset.collRemove.split("|");
+    colRemoveFromCollection(cid, rest.join("|"));
+  }));
+  root.querySelector("[data-coll-rename]")?.addEventListener("click", (e) => colRename("c:" + e.currentTarget.dataset.collRename));
+  root.querySelector("[data-coll-delete]")?.addEventListener("click", (e) => colDelete("c:" + e.currentTarget.dataset.collDelete));
   root.querySelectorAll("[data-lk-open]").forEach((card) => {
     const go = () => window.open(card.dataset.lkOpen, "_blank", "noopener");
     card.addEventListener("click", (e) => { if (!e.target.closest("[data-col-more]")) go(); });
@@ -2838,6 +2851,19 @@ function colMenu(key) {
 }
 
 /* forget a key (and everything after it) in the open path */
+const X_SVG = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+
+/* take one item out of a collection; the item itself stays (it goes back to Home) */
+function colRemoveFromCollection(cid, key) {
+  const c = state.collections.find((x) => x.id === cid);
+  if (!c) return;
+  const [kind, id] = colSplit(key);
+  const type = kind === "p" ? "project" : "link";
+  c.items = c.items.filter((it) => !(it.type === type && it.id === id));
+  persist();
+  colDropFromPath(key);
+}
+
 function colDropFromPath(key) {
   const i = colPath.indexOf(key);
   if (i >= 0) colPath = colPath.slice(0, i);
