@@ -2300,6 +2300,15 @@ function columnsHtml() {
   let preview = "";
   if (lastNode && lastNode.preview && !lastNode.folder && inlineAt < 0) preview = lastNode.preview();
   else if (lastNode && lastNode.folder && lastNode.preview && !IS_MOBILE) preview = lastNode.preview();
+  // a space picked on its own: its links use the free room on the right
+  else if (!IS_MOBILE && last && last.startsWith("p:")) {
+    const ref = colSplit(last)[1];
+    const p = containerByRef(ref);
+    if (p) preview = `<div class="colp colp-links">
+        <div class="col-bigtitle"><h2>Links</h2><button class="col-add" data-col-action="lk:${escapeHtml(ref)}|0">${ICONS.plus}<span>Add link</span></button></div>
+        ${colLinkCards(p, ref)}
+      </div>`;
+  }
   if (!preview && !colPath.length && !IS_MOBILE) preview = colUpNextHtml();
   if (preview) cols.push(`<div class="col col-preview ${colPath.length ? "" : "col-upnext"}" data-col="${depth}">${preview}</div>`);
   else if (colPath.length && cols.length && !lastKey.startsWith("p:")) cols[cols.length - 1] = cols[cols.length - 1].replace('<div class="col ', '<div class="col col-fill ');
@@ -2411,7 +2420,8 @@ function wireColumns() {
   const scroller = root.querySelector("[data-cols-scroll]");
   if (scroller && !IS_MOBILE) {
     root.classList.remove("cols-rail");
-    if (colPath.length >= 2 && scroller.scrollWidth > scroller.clientWidth + 4) root.classList.add("cols-rail");
+    const right = scroller.querySelector(".col-fill, .col-preview");
+    if (colPath.length >= 2 && (scroller.scrollWidth > scroller.clientWidth + 4 || (right && right.clientWidth < 520))) root.classList.add("cols-rail");
   }
   root.querySelectorAll("[data-lk-open]").forEach((card) => {
     const go = () => window.open(card.dataset.lkOpen, "_blank", "noopener");

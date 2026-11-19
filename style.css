@@ -4190,3 +4190,16 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 
 /* a touch more room between a heading (and its add button) and the first row */
 .col-section { padding-bottom: 12px; }
+
+/* widths: Home a little wider, the second column clearly wider; names stay on one line */
+.cols-scroll > .col[data-col="0"] { flex-basis: 300px; }
+@media (min-width: 701px) {
+  .cols-scroll > .col:not([data-col="0"]):not(.col-preview):not(.col-fill) { flex-basis: 480px; }
+  .col:not(.col-fill) .col-label {
+    display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .col:not(.col-fill) .col-text { min-width: 0; }
+}
+/* a space's links on the right */
+.colp-links { max-width: 600px; padding-top: 16px; }
+.colp-links .col-bigtitle { padding-left: 8px; }
