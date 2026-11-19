@@ -1833,7 +1833,7 @@ function colNode(key) {
       sections: [
         { title: "Spaces", keys: spaces.map((p) => "p:" + p.id) },
         { title: "Collections", keys: cols.map((c) => "c:" + c.id) },
-        { title: "Links", keys: links.map((l) => "l:" + l.id) },
+        { title: "", divider: true, keys: ["links"] },
         { title: "Lists", keys: [...Object.keys(WIDGETS).map((k) => "w:" + k), "people"] },
       ],
     };
@@ -1902,6 +1902,23 @@ function colNode(key) {
         empty: g ? "No subtasks yet" : "Tasks that sit under no goal land here",
         action: { label: g ? "Add subtask" : "Add task", run: () => openItemSheet({ ref, kind: "task", goalId: g ? gid : "" }) },
       }],
+    };
+  }
+  if (kind === "links") {
+    const groups = allLinkGroups();
+    const total = groups.reduce((n, g) => n + g.items.length, 0);
+    return {
+      title: "Links", label: "Links",
+      icon: `<span class="col-glyph">${COL_ICONS.links}</span>`,
+      meta: total ? String(total) : "",
+      folder: true,
+      bigTitle: true,
+      titleAction: 0,
+      body: () => groups.length
+        ? groups.map((g) => `${g.name ? `<div class="col-section lk-group">${escapeHtml(g.name)}</div>` : ""}${linkCardsHtml(g.items)}`).join("")
+        : `<div class="col-hint">No links yet</div>`,
+      sections: [{ title: "", keys: groups.flatMap((g) => g.items.map((it) => it.key)),
+        action: { label: "Add link", run: () => openLinkSheet({ ref: null }) } }],
     };
   }
   if (kind === "lk") {
@@ -2127,19 +2144,31 @@ function colGoalHeader(g, subs) {
     </div>`;
 }
 
-/* a space's links as cards */
-function colLinkCards(p, ref) {
-  if (!p.links.length) return `<div class="col-hint">No links yet</div>`;
-  return `<div class="lk-grid">${p.links.map((l) => {
+/* links as cards; a card opens its link, ··· renames, edits or removes */
+function linkCardsHtml(items) {
+  return `<div class="lk-grid">${items.map(({ key, l }) => {
     let host = "";
     try { host = new URL(l.url).hostname.replace(/^www\./, ""); } catch {}
-    const key = "pl:" + ref + ":" + l.id;
     return `<div class="lk-card" data-lk-open="${escapeHtml(l.url)}" title="${escapeHtml(l.url)}" tabindex="0">
         <span class="col-tile col-tile-link"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>
         <span class="lk-text"><span class="lk-name">${escapeHtml(l.name || host || "Link")}</span><span class="lk-host">${escapeHtml(host)}</span></span>
         <button class="col-more" data-col-more="${escapeHtml(key)}" aria-label="More actions" title="Edit or remove">${MORE_SVG}</button>
       </div>`;
   }).join("")}</div>`;
+}
+function colLinkCards(p, ref) {
+  if (!p.links.length) return `<div class="col-hint">No links yet</div>`;
+  return linkCardsHtml(p.links.map((l) => ({ key: "pl:" + ref + ":" + l.id, l })));
+}
+/* every link in one place: Home's own, then each space's */
+function allLinkGroups() {
+  const groups = [];
+  const home = state.links.filter((l) => onDesktop("link", l.id));
+  if (home.length) groups.push({ name: "", items: home.map((l) => ({ key: "l:" + l.id, l })) });
+  state.projects.filter((p) => onDesktop("project", p.id) && p.links && p.links.length).forEach((p) =>
+    groups.push({ name: p.name, items: p.links.map((l) => ({ key: "pl:" + p.id + ":" + l.id, l })) }));
+  if (groups.length && !groups[0].name) groups[0].name = "Home";
+  return groups;
 }
 
 /* a picked link opens right under its row too */
@@ -3081,6 +3110,15 @@ function openLinkSheet({ ref, link: editing = null }) {
       return;
     }
     const l = { id: uid(), url: u, name: name.value.trim() || host };
+    if (!p) {
+      state.links.push({ ...l, pos: defaultPos(state.links.length + 3) });
+      persist();
+      sheet.close();
+      colPath = ["links"];
+      saveColPath();
+      redrawColumns("links");
+      return;
+    }
     p.links.push(l);
     persist();
     sheet.close();
