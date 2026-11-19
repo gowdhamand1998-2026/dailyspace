@@ -1774,7 +1774,7 @@ function homeView() { return "columns"; } // the icon desktop is retired
 
 /* ---- the column tree ----
    keys: root · p:<ref> · g:<ref>:<goalId> · o:<ref> (Others) · nl:<ref> (Notes)
-         lk:<ref> (space links) · t:<ref>:<taskId> · n:<ref>:<noteId>
+         lk:<ref> (a space's Links folder) · pl:<ref>:<linkId> · t:<ref>:<taskId> · n:<ref>:<noteId>
          c:<collectionId> · l:<linkId> · w:<widget> · people · per:<personId> */
 
 const colShowDone = {}; // spaces whose finished goals are unfolded
@@ -1874,9 +1874,7 @@ function colNode(key) {
             const ed = app.querySelector('.col-preview [data-nsec="root"] .note-card-text');
             if (ed) ed.focus();
           } } },
-        { title: "Links", keys: p.links.map((l) => "pl:" + rest + ":" + l.id),
-          empty: "No links yet",
-          action: { label: "Add link", run: () => openLinkSheet({ ref: rest }) } },
+        { title: "", divider: true, keys: ["lk:" + rest] },
       ],
     };
   }
@@ -1905,6 +1903,19 @@ function colNode(key) {
         empty: g ? "No subtasks yet" : "Tasks that sit under no goal land here",
         action: { label: g ? "Add subtask" : "Add task", run: () => openItemSheet({ ref, kind: "task", goalId: g ? gid : "" }) },
       }],
+    };
+  }
+  if (kind === "lk") {
+    const p = containerByRef(rest);
+    if (!p) return null;
+    return {
+      title: "Links", label: "Links",
+      icon: `<span class="col-glyph">${COL_ICONS.links}</span>`,
+      meta: p.links.length ? String(p.links.length) : "",
+      folder: true,
+      sections: [{ title: "", keys: p.links.map((l) => "pl:" + rest + ":" + l.id),
+        empty: "No links yet",
+        action: { label: "Add link", run: () => openLinkSheet({ ref: rest }) } }],
     };
   }
   if (kind === "pl") {
@@ -2120,6 +2131,20 @@ function colGoalHeader(g, subs) {
     </div>`;
 }
 
+/* a picked link opens right under its row too */
+function colLinkInline(key) {
+  const t = colTarget(key);
+  if (!t || !t.obj) return "";
+  return `<div class="col-inline">
+      <div class="colp-sub colp-url">${escapeHtml(t.obj.url)}</div>
+      <div class="col-acts">
+        <button class="col-act" data-colp-open>Open link</button>
+        <button class="col-act" data-colp-editlink>Edit</button>
+        <button class="col-act col-act-quiet" data-colp-remove>Remove</button>
+      </div>
+    </div>`;
+}
+
 /* a picked task opens right under its row: no extra column */
 function colTaskInline(key) {
   const n = colNode(key);
@@ -2199,17 +2224,19 @@ function columnsHtml() {
   const keys = ["root", ...colPath];
   // on desktop a task picked inside a goal (or Others) opens under its row
   const lastKey = colPath[colPath.length - 1];
-  const inlineAt = !IS_MOBILE && colPath.length >= 2 && /^t$/.test(colSplit(lastKey)[0])
-    && /^(g|o)$/.test(colSplit(colPath[colPath.length - 2])[0]) ? colPath.length - 1 : -1;
+  const inlineAt = !IS_MOBILE && colPath.length >= 2 && (
+    (/^t$/.test(colSplit(lastKey)[0]) && /^(g|o)$/.test(colSplit(colPath[colPath.length - 2])[0]))
+    || (/^pl$/.test(colSplit(lastKey)[0]) && /^lk$/.test(colSplit(colPath[colPath.length - 2])[0]))) ? colPath.length - 1 : -1;
   while (node && node.sections) {
     const sel = colPath[depth];
     const body = node.sections.map((s, si) => (s.keys.length || s.action) ? `
+      ${s.divider ? `<div class="col-sep"></div>` : ""}
       ${s.title || s.action ? `<div class="col-section ${s.quiet ? "col-section-quiet" : ""}">
         <span>${escapeHtml(s.title || "")}</span>
         ${s.action ? `<button class="col-add ${s.action.toggle ? "col-toggle" : ""}" data-col-action="${escapeHtml(keys[depth])}|${si}" title="${escapeHtml(s.action.label)}" aria-label="${escapeHtml(s.action.label)}">${s.action.toggle ? "" : ICONS.plus}<span>${escapeHtml(s.action.label)}</span></button>` : ""}
       </div>` : ""}
       ${s.keys.map((k) => colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]))
-        + (inlineAt === depth && k === sel ? colTaskInline(k) : "")).join("")}
+        + (inlineAt === depth && k === sel ? (k.startsWith("pl:") ? colLinkInline(k) : colTaskInline(k)) : "")).join("")}
       ${!s.keys.length && s.empty ? `<div class="col-hint">${escapeHtml(s.empty)}</div>` : ""}
     ` : "").join("");
     cols.push(`
@@ -3044,7 +3071,7 @@ function openLinkSheet({ ref, link: editing = null }) {
     p.links.push(l);
     persist();
     sheet.close();
-    colRevealPath(ref, ["pl:" + ref + ":" + l.id]);
+    colRevealPath(ref, ["lk:" + ref, "pl:" + ref + ":" + l.id]);
   }
   sheet.el.querySelector("[data-sheet-ok]").addEventListener("click", submit);
   [url, name].forEach((i) => i.addEventListener("keydown", (e) => {

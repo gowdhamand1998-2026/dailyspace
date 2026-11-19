@@ -4112,3 +4112,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 /* air: below every section heading, and a hair between rows */
 .col-section { padding-bottom: 8px; }
 .col-body .col-row + .col-row { margin-top: 2px; }
+
+/* a plain dividing line between groups (e.g. above a space's Links row) */
+.col-sep { margin: 12px 0 8px; border-top: 1px solid var(--line); }
+.col-inline .colp-url { margin: 2px 0 0; font-size: 12.5px; color: var(--text-3); word-break: break-all; }
