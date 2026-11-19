@@ -1854,6 +1854,7 @@ function colNode(key) {
       meta: st.open ? `${st.over ? `<span class="col-over-dot" title="${st.over} overdue"></span>` : ""}${st.open}` : "",
       folder: true,
       open: () => (window.location.hash = "#/p/" + rest),
+      header: () => colSpaceStats(p),
       sections: [
         ...(p.tracker ? [{ title: p.tracker.name, keys: subs.map((c) => "p:" + rest + "~" + c.id) }] : []),
         { title: "Goals", keys: [...goals.map((g) => "g:" + rest + ":" + g.id), "o:" + rest],
@@ -1916,7 +1917,7 @@ function colNode(key) {
     return {
       label: l.name || host || "Link",
       icon: `<span class="col-tile col-tile-link"><img src="${linkIconSrc(l.url)}" alt="" onerror="this.style.display='none'" /></span>`,
-      meta: escapeHtml(host),
+      meta: "",
       open: () => window.open(l.url, "_blank", "noopener"),
       preview: () => `
         <div class="colp">
@@ -1954,7 +1955,7 @@ function colNode(key) {
       label: text.slice(0, 160) || "New note",
       note: n,
       icon: `<span class="col-glyph">${COL_ICONS.note}</span>`,
-      meta: (n.thread && n.thread.length ? `<span class="col-thread" title="${n.thread.length + 1} sections">${n.thread.length + 1} parts</span>` : "") + shortDay(n.updatedAt || n.createdAt),
+      meta: "",
       open: () => openSpaceTab(ref, "notes"),
       preview: () => `
         <div class="colp">
@@ -2088,38 +2089,20 @@ function colTaskPreview(t, p, ref) {
     </div>`;
 }
 
-/* a space is picked. The columns already show its name, goals and their
-   counts, so this side only adds what they can't: how the week is going
-   and which tasks come next (tasks are otherwise one click deeper). */
-function colSpacePreview(p, ref) {
+/* how the week is going in a space: sits at the top of the space's own
+   column, so picking a space needs no separate panel on the right */
+function colSpaceStats(p) {
   const open = p.tasks.filter((t) => !t.done);
   const over = open.filter((t) => t.due && dueDelta(t.due) < 0).length;
   const week = open.filter((t) => t.due && dueDelta(t.due) >= 0 && dueDelta(t.due) <= 7).length;
   const since = Date.now() - 7 * 864e5;
   const doneWeek = p.tasks.filter((t) => t.done && t.closedAt && new Date(t.closedAt) >= since).length
     + p.goals.filter((g) => g.done && g.closedAt && new Date(g.closedAt) >= since).length;
-  const next = open.slice().sort(colTaskSort).slice(0, 6).map((t) => {
-    const goal = t.goalId && p.goals.find((g) => g.id === t.goalId);
-    const tail = [t.goalId ? `g:${ref}:${t.goalId}` : `o:${ref}`, `t:${ref}:${t.id}`];
-    return `<button class="upnext-row" data-upnext="${escapeHtml(ref)}" data-upnext-tail="${escapeHtml(tail.join("|"))}">
-      <span class="upnext-text">${escapeHtml(t.text)}</span>
-      <span class="upnext-space">${goal ? escapeHtml(goal.text) : "Others"}</span>
-      ${colTaskSub(t)}
-    </button>`;
-  }).join("");
   const stat = (n, label, cls = "") => `<div class="ov-stat ${cls}"><b>${n}</b><span>${label}</span></div>`;
-  return `
-    <div class="colp ov">
-      ${p.description ? `<div class="ov-desc">${escapeHtml(p.description)}</div>` : ""}
-      <div class="ov-stats">
-        ${stat(over, "overdue", over ? "is-over" : "")}
-        ${stat(week, "due this week")}
-        ${stat(doneWeek, "done this week")}
-      </div>
-      <div class="ov-block">
-        <div class="ov-head"><span>Next up</span><button class="ov-add" data-ov-add="task">${ICONS.plus}Add task</button></div>
-        ${next ? `<div class="upnext-list">${next}</div>` : `<p class="ov-empty">Nothing open in this space.</p>`}
-      </div>
+  return `<div class="col-stats ov-stats">
+      ${stat(over, "overdue", over ? "is-over" : "")}
+      ${stat(week, "due this week")}
+      ${stat(doneWeek, "done this week")}
     </div>`;
 }
 
@@ -2228,7 +2211,7 @@ function columnsHtml() {
             ${depth > 0 && node.open ? `<button class="col-head-open" data-col-open="${escapeHtml(keys[depth])}" title="Open">Open ${CHEVRON_R}</button>` : ""}
           </span>
         </div>
-        <div class="col-body">${body.trim() ? body : `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`}</div>
+        <div class="col-body">${node.header ? node.header() : ""}${body.trim() ? body : `<div class="col-empty">${escapeHtml(node.emptyText || "Empty")}</div>`}</div>
       </div>`);
     if (!sel) break;
     const next = colNode(sel);
@@ -2241,12 +2224,10 @@ function columnsHtml() {
   const lastNode = last && colNode(last);
   let preview = "";
   if (lastNode && lastNode.preview && !lastNode.folder) preview = lastNode.preview();
-  else if (last && last.startsWith("p:") && (!IS_MOBILE || !hasChildren(lastNode))) {
-    const ref = colSplit(last)[1];
-    preview = colSpacePreview(containerByRef(ref), ref);
-  } else if (lastNode && lastNode.folder && lastNode.preview && !IS_MOBILE) preview = lastNode.preview();
+  else if (lastNode && lastNode.folder && lastNode.preview && !IS_MOBILE) preview = lastNode.preview();
   if (!preview && !colPath.length && !IS_MOBILE) preview = colUpNextHtml();
   if (preview) cols.push(`<div class="col col-preview ${colPath.length ? "" : "col-upnext"}" data-col="${depth}">${preview}</div>`);
+  else if (colPath.length && cols.length) cols[cols.length - 1] = cols[cols.length - 1].replace('<div class="col ', '<div class="col col-fill ');
 
   const crumbs = keys.map((k) => (colNode(k) || {}).title || (colNode(k) || {}).label || "");
   const backTitle = crumbs.length > 1 ? crumbs[crumbs.length - 2] : "";
