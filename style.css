@@ -4029,3 +4029,45 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   .col-fill .col-body > * { max-width: 760px; }
   .col-fill .col-stats { margin: 6px 0 14px; }
 }
+
+/* ============================================================
+   Columns, pass 5: a goal fills the room, its tasks open in place,
+   section adds fold to a quiet plus
+   ============================================================ */
+@media (min-width: 701px) {
+  /* a space or goal that's open beside others keeps a comfortable width */
+  .cols-scroll > .col:not([data-col="0"]):not(.col-preview):not(.col-fill) { flex-basis: 360px; }
+  /* the last column fills, but its content stays a readable width and long names wrap */
+  .col-fill .col-body > * { max-width: 600px; }
+  .col-fill .col-label { white-space: normal; }
+}
+
+/* adds: just a plus until you reach for the section */
+@media (hover: hover) and (min-width: 701px) {
+  .col-add:not(.col-toggle) { padding: 0 6px; gap: 0; }
+  .col-add:not(.col-toggle) span {
+    max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap;
+    transition: max-width .18s ease, opacity .15s ease, margin .18s ease;
+  }
+  .col-section:hover .col-add:not(.col-toggle) span,
+  .col-add:not(.col-toggle):focus-visible span { max-width: 110px; opacity: 1; margin-left: 4px; }
+}
+
+/* goal header at the top of its column */
+.col-ghead { padding: 6px 8px 14px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.col-ghead .ov-progress { margin-top: 2px; }
+.col-gfacts { display: flex; gap: 14px; margin-top: 10px; font-size: 12.5px; color: var(--text-2); }
+.col-gfacts span + span::before { content: "·"; margin-right: 14px; color: var(--text-3); }
+.col-ghead .colp-actions { margin-top: 12px; }
+.col-ghead + .col-section { border-top: none; margin-top: 0; padding-top: 10px; }
+
+/* a task opened in place */
+.col-inline {
+  margin: 2px 4px 10px 36px; padding: 4px 14px 12px;
+  border-left: 2px solid rgba(59,130,246,.5);
+}
+.col-inline .colp-factlist { margin-top: 0; }
+.col-inline .colp-actions { margin-top: 12px; }
+.col-inline .colp-foot { margin-top: 10px; }
+.col-ghead { border-bottom: none; padding-bottom: 6px; }
+.col-fill .col-body > .col-inline { max-width: 560px; }

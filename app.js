@@ -1898,7 +1898,7 @@ function colNode(key) {
       others: !g,
       folder: true,
       open: () => openSpaceTab(ref, "work"),
-      preview: () => colGoalPreview(p, ref, g, subs),
+      header: () => g ? colGoalHeader(g, subs) : "",
       sections: [{
         title: g ? "Subtasks" : "Tasks",
         keys: subs.map((t) => "t:" + ref + ":" + t.id),
@@ -2106,33 +2106,51 @@ function colSpaceStats(p) {
     </div>`;
 }
 
-/* a goal (or Others) is picked. Its name and subtasks are already in the
-   columns, so this side holds progress, owner, due date and the actions. */
-function colGoalPreview(p, ref, g, subs) {
+/* top of a goal's column: progress, owner, due and the goal's actions */
+function colGoalHeader(g, subs) {
   const done = subs.filter((t) => t.done).length;
   const pct = subs.length ? Math.round((done / subs.length) * 100) : 0;
-  const fact = (k, v) => v ? `<div class="colp-fact"><span>${k}</span><b>${v}</b></div>` : "";
-  if (!g) return `
-    <div class="colp ov">
-      <p class="ov-empty">Tasks that don't belong to any goal. Pick one to see its details.</p>
-    </div>`;
   const owner = isMine(g) ? "Me" : (personById(g.owner) || {}).name || "Me";
-  return `
-    <div class="colp ov">
-      <div class="ov-head"><span>Progress</span></div>
+  const due = g.due ? colTaskSub({ ...g, owner: "me" }).replace('class="col-sub"', 'class="colp-due"') : "No due date";
+  return `<div class="col-ghead">
       <div class="ov-progress">
         <span class="ov-bar ov-bar-lg"><span style="width:${pct}%"></span></span>
         <span>${subs.length ? `${done} of ${subs.length} done` : "No subtasks yet"}</span>
       </div>
-      <div class="colp-factlist">
-        ${fact("Owner", escapeHtml(owner))}
-        ${fact("Due", g.due ? colTaskSub({ ...g, owner: "me" }).replace('class="col-sub"', 'class="colp-due"') : "None")}
-      </div>
+      <div class="col-gfacts"><span>${escapeHtml(owner)}</span><span>${due}</span></div>
       <div class="colp-actions">
         <button class="btn btn-primary btn-sm" data-ov-goal-toggle>${g.done ? "Reopen goal" : "Mark goal done"}</button>
         <button class="btn btn-ghost btn-sm" data-ov-goal-edit>Edit</button>
         <button class="colp-delete" data-ov-goal-delete>Delete</button>
       </div>
+    </div>`;
+}
+
+/* a picked task opens right under its row: no extra column */
+function colTaskInline(key) {
+  const n = colNode(key);
+  if (!n || !n.task) return "";
+  const t = n.task, p = containerByRef(n.ref);
+  const owner = isMine(t) ? "Me" : (personById(t.owner) || {}).name || "Me";
+  const people = (t.people || []).map((id) => personById(id)).filter(Boolean);
+  const note = plainText(t.note);
+  const fact = (k, v) => v ? `<div class="colp-fact"><span>${k}</span><b>${v}</b></div>` : "";
+  return `<div class="col-inline">
+      <div class="colp-factlist">
+        ${fact("Owner", escapeHtml(owner))}
+        ${fact("Due", t.due ? colTaskSub({ ...t, owner: "me" }).replace('class="col-sub"', 'class="colp-due"') : "")}
+        ${fact("With", people.map((x) => escapeHtml(x.name)).join(", "))}
+        ${fact("Closed", t.done && t.closedAt ? escapeHtml(fmtDT(t.closedAt)) : "")}
+      </div>
+      ${note ? `<div class="colp-note colp-note-sm">${noteBodyHtml(t.note)}</div>` : ""}
+      ${t.link ? `<a class="colp-link" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">Link<span>${escapeHtml(t.link)}</span></a>` : ""}
+      <div class="colp-actions">
+        <button class="btn btn-primary btn-sm" data-colp-toggle>${t.done ? "Reopen" : "Mark done"}</button>
+        <button class="btn btn-ghost btn-sm" data-colp-edititem>Edit</button>
+        <button class="btn btn-ghost btn-sm" data-colp-open>Open in ${escapeHtml(p ? p.name : "space")}</button>
+        <button class="colp-delete" data-colp-delete>Delete</button>
+      </div>
+      ${t.createdAt ? `<div class="colp-foot">Added ${escapeHtml(shortDay(t.createdAt))}</div>` : ""}
     </div>`;
 }
 
@@ -2193,14 +2211,19 @@ function columnsHtml() {
   let node = colNode("root");
   let depth = 0;
   const keys = ["root", ...colPath];
+  // on desktop a task picked inside a goal (or Others) opens under its row
+  const lastKey = colPath[colPath.length - 1];
+  const inlineAt = !IS_MOBILE && colPath.length >= 2 && /^t$/.test(colSplit(lastKey)[0])
+    && /^(g|o)$/.test(colSplit(colPath[colPath.length - 2])[0]) ? colPath.length - 1 : -1;
   while (node && node.sections) {
     const sel = colPath[depth];
     const body = node.sections.map((s, si) => (s.keys.length || s.action) ? `
       ${s.title || s.action ? `<div class="col-section ${s.quiet ? "col-section-quiet" : ""}">
         <span>${escapeHtml(s.title || "")}</span>
-        ${s.action ? `<button class="col-add ${s.action.toggle ? "col-toggle" : ""}" data-col-action="${escapeHtml(keys[depth])}|${si}">${s.action.toggle ? "" : ICONS.plus}<span>${escapeHtml(s.action.label)}</span></button>` : ""}
+        ${s.action ? `<button class="col-add ${s.action.toggle ? "col-toggle" : ""}" data-col-action="${escapeHtml(keys[depth])}|${si}" title="${escapeHtml(s.action.label)}" aria-label="${escapeHtml(s.action.label)}">${s.action.toggle ? "" : ICONS.plus}<span>${escapeHtml(s.action.label)}</span></button>` : ""}
       </div>` : ""}
-      ${s.keys.map((k) => colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]))).join("")}
+      ${s.keys.map((k) => colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]))
+        + (inlineAt === depth && k === sel ? colTaskInline(k) : "")).join("")}
       ${!s.keys.length && s.empty ? `<div class="col-hint">${escapeHtml(s.empty)}</div>` : ""}
     ` : "").join("");
     cols.push(`
@@ -2223,7 +2246,7 @@ function columnsHtml() {
   const last = colPath[colPath.length - 1];
   const lastNode = last && colNode(last);
   let preview = "";
-  if (lastNode && lastNode.preview && !lastNode.folder) preview = lastNode.preview();
+  if (lastNode && lastNode.preview && !lastNode.folder && inlineAt < 0) preview = lastNode.preview();
   else if (lastNode && lastNode.folder && lastNode.preview && !IS_MOBILE) preview = lastNode.preview();
   if (!preview && !colPath.length && !IS_MOBILE) preview = colUpNextHtml();
   if (preview) cols.push(`<div class="col col-preview ${colPath.length ? "" : "col-upnext"}" data-col="${depth}">${preview}</div>`);
@@ -2317,7 +2340,7 @@ function wireColumns() {
     if (!ref) return;
     openItemSheet({ ref, kind: btn.dataset.ovAdd === "goal" ? "goal" : "task" });
   }));
-  const goalKey = colPath[colPath.length - 1];
+  const goalKey = colPath.find((k) => k.startsWith("g:"));
   root.querySelector("[data-ov-goal-edit]")?.addEventListener("click", () => {
     const t = colTarget(goalKey);
     if (t) openItemSheet({ ref: t.ref, kind: "goal", item: t.obj });
@@ -2329,7 +2352,7 @@ function wireColumns() {
     t.obj.done = !t.obj.done;
     if (t.obj.done) t.obj.closedAt = new Date().toISOString(); else delete t.obj.closedAt;
     persist();
-    if (t.obj.done) { colPath = colPath.slice(0, -1); saveColPath(); }
+    if (t.obj.done) { colPath = colPath.slice(0, colPath.indexOf(goalKey)); saveColPath(); }
     redrawColumns();
   });
   // narrow screens: Home folds into a slim rail so the deeper columns fit
@@ -2344,6 +2367,12 @@ function wireColumns() {
   root.querySelectorAll("[data-col-key]").forEach((row) => {
     row.addEventListener("click", (e) => {
       if (e.target.closest("[data-col-check], [data-col-more], .col-rename")) return;
+      if (row.classList.contains("selected") && row.nextElementSibling && row.nextElementSibling.classList.contains("col-inline")) {
+        colPath = colPath.slice(0, +row.dataset.colDepth);
+        saveColPath();
+        redrawColumns(colPath[colPath.length - 1]);
+        return;
+      }
       colSelect(+row.dataset.colDepth, row.dataset.colKey);
     });
     row.addEventListener("dblclick", (e) => {
