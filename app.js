@@ -2098,10 +2098,6 @@ function colNode(key) {
       icon: `<span class="col-tile col-tile-folder" style="--pa:${kcolor(c.name)}">${COL_ICONS.folder}</span>`,
       meta: String(c.items.length), folder: true,
       collection: c.id,
-      header: () => `<div class="col-ghead"><div class="col-acts">
-          <button class="col-act" data-coll-rename="${escapeHtml(c.id)}">Rename</button>
-          <button class="col-act col-act-quiet" data-coll-delete="${escapeHtml(c.id)}">Delete collection</button>
-        </div></div>`,
       emptyText: "Nothing in this collection yet",
       sections: [{ title: "Projects", keys: c.items
         .filter((it) => it.type === "project" ? getProject(it.id) : state.links.some((l) => l.id === it.id))
