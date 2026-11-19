@@ -3914,3 +3914,80 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   .upnext { padding-top: 8px; }
   .colp-delete { margin-left: 0; width: 100%; height: 40px; }
 }
+
+/* ============================================================
+   desktop columns pass: readable rows, quiet section actions,
+   overviews on the right, Home folds to a rail when space runs out
+   ============================================================ */
+@media (min-width: 701px) {
+  .col-row { font-size: 13.5px; min-height: 36px; }
+  .col-head { font-size: 12px; color: var(--text); }
+  .col-section { font-size: 11px; }
+  .col-meta { font-size: 12px; }
+}
+
+/* section actions: grey until you reach for them */
+.col-add { color: var(--text-3); background: transparent; }
+.col-add:hover { color: var(--text); background: rgba(255,255,255,.07); }
+.col-section:hover .col-add { color: var(--text-2); }
+.col-toggle { padding: 0 8px; }
+.col-section-quiet { padding-top: 18px; }
+
+/* Others sits apart from the real goals */
+.col-row.is-others { margin-top: 4px; position: relative; }
+.col-row.is-others::before {
+  content: ""; position: absolute; left: 8px; right: 8px; top: -3px;
+  border-top: 1px dashed var(--line);
+}
+.col-row.is-others .col-label { color: var(--text-2); }
+
+.col-frac { font-variant-numeric: tabular-nums; }
+.col-thread { background: none; color: var(--text-3); padding: 0; margin-right: 8px; font-size: 11.5px; height: auto; }
+.col-active .col-row.selected .col-thread { background: none; color: rgba(255,255,255,.85); }
+.col-sub .sub-space { color: var(--text-2); }
+
+/* overview on the right (space or goal picked) */
+.ov { max-width: 620px; }
+.ov .colp-title { font-size: 24px; }
+.ov-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 20px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.ov-stat { padding: 14px 0 12px; display: flex; flex-direction: column; gap: 2px; }
+.ov-stat + .ov-stat { padding-left: 16px; border-left: 1px solid var(--line); }
+.ov-stat b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.ov-stat span { font-size: 12px; color: var(--text-3); }
+.ov-stat.is-over b { color: #f87171; }
+.ov-block { margin-top: 26px; display: flex; flex-direction: column; }
+.ov-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.ov-add { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px 0 7px; border-radius: 7px; font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-2); background: rgba(255,255,255,.05); }
+.ov-add:hover { color: var(--text); background: rgba(255,255,255,.1); }
+.ov-add svg { width: 13px; height: 13px; }
+.ov-goal {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center;
+  padding: 11px 4px; border-bottom: 1px solid var(--line); text-align: left; transition: background .15s;
+}
+.ov-goal:first-of-type { border-top: 1px solid var(--line); }
+.ov-goal:hover { background: rgba(255,255,255,.035); }
+.ov-goal-name { font-size: 14px; color: var(--text); }
+.ov-goal-frac { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ov-bar { grid-column: 1 / -1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden; display: block; }
+.ov-bar > span { display: block; height: 100%; border-radius: 2px; background: #e3d7bf; }
+.ov-bar-lg { height: 5px; flex: 1; }
+.ov-progress { display: flex; align-items: center; gap: 14px; margin-top: 16px; font-size: 12.5px; color: var(--text-2); }
+.ov-progress .ov-bar { max-width: 240px; }
+.ov-empty { font-size: 13px; color: var(--text-3); padding: 6px 0; }
+.ov .upnext-row { grid-template-columns: minmax(0, 1fr); }
+.colp-foot { margin-top: 18px; font-size: 11.5px; color: var(--text-3); }
+
+/* Home becomes a slim rail when deeper columns need the room */
+.cols-rail .cols-scroll > .col[data-col="0"] { flex: 0 0 58px; }
+.cols-rail .col[data-col="0"] .col-head > span,
+.cols-rail .col[data-col="0"] .col-section,
+.cols-rail .col[data-col="0"] .col-label,
+.cols-rail .col[data-col="0"] .col-trail,
+.cols-rail .col[data-col="0"] .col-more,
+.cols-rail .col[data-col="0"] .col-chev { display: none; }
+.cols-rail .col[data-col="0"] .col-body { padding: 8px 6px; }
+.cols-rail .col[data-col="0"] .col-row { justify-content: center; padding: 6px 0; min-height: 38px; }
+.cols-rail .col[data-col="0"] .col-row + .col-row { margin-top: 2px; }
+.cols-rail .col[data-col="0"] .col-section + .col-row { margin-top: 10px; }
+.col-section + .col-row.is-others { margin-top: 0; }
+.col-section + .col-row.is-others::before { display: none; }
