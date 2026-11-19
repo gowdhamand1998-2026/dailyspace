@@ -2227,7 +2227,7 @@ function columnsHtml() {
       ${!s.keys.length && s.empty ? `<div class="col-hint">${escapeHtml(s.empty)}</div>` : ""}
     ` : "").join("");
     cols.push(`
-      <div class="col ${depth === colPath.length - 1 ? "col-active" : ""}" data-col="${depth}" role="listbox" aria-label="${escapeHtml(node.title || "")}">
+      <div class="col ${depth === colPath.length - 1 ? "col-active" : ""}" data-col="${depth}" data-kind="${escapeHtml(colSplit(keys[depth])[0])}" role="listbox" aria-label="${escapeHtml(node.title || "")}">
         <div class="col-head"><span>${escapeHtml(node.title || "")}</span>
           <span class="col-head-actions">
             ${depth > 0 && colMenu(keys[depth]).length ? `<button class="col-more col-more-head" data-col-more="${escapeHtml(keys[depth])}" aria-label="More actions" title="More">${MORE_SVG}</button>` : ""}
@@ -2250,7 +2250,7 @@ function columnsHtml() {
   else if (lastNode && lastNode.folder && lastNode.preview && !IS_MOBILE) preview = lastNode.preview();
   if (!preview && !colPath.length && !IS_MOBILE) preview = colUpNextHtml();
   if (preview) cols.push(`<div class="col col-preview ${colPath.length ? "" : "col-upnext"}" data-col="${depth}">${preview}</div>`);
-  else if (colPath.length && cols.length) cols[cols.length - 1] = cols[cols.length - 1].replace('<div class="col ', '<div class="col col-fill ');
+  else if (colPath.length && cols.length && !lastKey.startsWith("p:")) cols[cols.length - 1] = cols[cols.length - 1].replace('<div class="col ', '<div class="col col-fill ');
 
   const crumbs = keys.map((k) => (colNode(k) || {}).title || (colNode(k) || {}).label || "");
   const backTitle = crumbs.length > 1 ? crumbs[crumbs.length - 2] : "";

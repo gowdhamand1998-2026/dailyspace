@@ -4071,3 +4071,19 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .col-inline .colp-foot { margin-top: 10px; }
 .col-ghead { border-bottom: none; padding-bottom: 6px; }
 .col-fill .col-body > .col-inline { max-width: 560px; }
+
+/* ============================================================
+   Columns, pass 6: a space keeps one width with its own edge,
+   one line under the header, adds always shown as buttons
+   ============================================================ */
+/* the column header already draws the line above the numbers */
+.col-stats { border-top: none; margin-top: 0; }
+.col-stats .ov-stat { padding-top: 6px; }
+
+/* adds: small buttons, always visible */
+.col-add:not(.col-toggle) {
+  padding: 0 9px 0 7px; gap: 4px;
+  color: var(--text-2); background: rgba(255,255,255,.06);
+}
+.col-add:not(.col-toggle):hover { color: var(--text); background: rgba(255,255,255,.11); }
+.col-add:not(.col-toggle) span { max-width: none; opacity: 1; margin-left: 0; overflow: visible; }
