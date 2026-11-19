@@ -4214,3 +4214,11 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .col-active .col-row.selected .col-x { color: rgba(255,255,255,.85); }
 @media (hover: none) { .col-x { visibility: visible; } }
 .col-bigtitle + .col-ghead .col-acts { margin-top: 2px; }
+
+/* folders: a tinted tile with a folder mark, so they read apart from single projects */
+.col-tile-folder { display: inline-flex; align-items: center; justify-content: center; }
+.col-tile-folder svg { width: 13px; height: 13px; color: #fff; }
+/* new space: make it a folder */
+.np-folder { display: flex; align-items: center; gap: 10px; margin: 4px 0 2px; font-size: 13.5px; color: var(--text); cursor: pointer; }
+.np-folder input { width: 16px; height: 16px; margin: 0; accent-color: var(--select); }
+.np-folder small { display: block; font-size: 12px; color: var(--text-3); }

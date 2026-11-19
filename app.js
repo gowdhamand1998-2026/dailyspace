@@ -136,6 +136,38 @@ function ensureSubtree(items, depth) {
   });
 }
 
+/* a folder is a space that holds several projects (its tracker has items,
+   or it was made as a folder). Single projects keep their own goals/notes. */
+function isFolder(p) {
+  return !!(p && (p.folder || (p.tracker && p.tracker.items && p.tracker.items.length)));
+}
+
+/* once: a folder's own notes move into the project they talk about first
+   (e.g. "Catch up: Stride, Claylight" goes to Stride's notes) */
+function moveFolderNotes(s) {
+  if (s.migFolderNotes) return;
+  const text = (html) => String(html || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").toLowerCase();
+  (s.projects || []).forEach((p) => {
+    if (!isFolder(p) || !p.notesList || !p.notesList.length) return;
+    const subs = p.tracker.items;
+    p.notesList = p.notesList.filter((n) => {
+      const t = text([n.text, ...(n.thread || []).map((x) => x.text)].join(" "));
+      let best = null, at = Infinity;
+      subs.forEach((c) => {
+        const name = (c.name || "").trim().toLowerCase();
+        if (!name) return;
+        const m = new RegExp("(^|[^a-z0-9])" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "($|[^a-z0-9])").exec(t);
+        if (m && m.index < at) { at = m.index; best = c; }
+      });
+      if (!best) return true;
+      if (!best.notesList) best.notesList = [];
+      best.notesList.unshift(n);
+      return false;
+    });
+  });
+  s.migFolderNotes = true;
+}
+
 function ensureDefaults(s) {
   if (!s.projects) s.projects = [];
   s.projects.forEach((p, i) => {
@@ -283,6 +315,7 @@ function ensureDefaults(s) {
     s.seedPurged = true;
   }
   applyImports(s);
+  moveFolderNotes(s);
   return s;
 }
 
@@ -1820,6 +1853,54 @@ function colTaskSort(a, b) {
 }
 
 /* a node knows how to draw its row, list its children, or preview itself */
+/* a single project's column: notes, the Links row, goals */
+function spaceSections(p, rest, goals, doneGoals) {
+  return [
+        { title: "Notes", keys: p.notesList.map((n) => "n:" + rest + ":" + n.id),
+          empty: "No notes yet",
+          action: { label: "Add note", run: () => {
+            const now = new Date().toISOString();
+            const n = { id: uid(), text: "", createdAt: now, updatedAt: now, thread: [] };
+            p.notesList.unshift(n);
+            persist();
+            colRevealPath(rest, ["n:" + rest + ":" + n.id]);
+            const ed = app.querySelector('.col-preview [data-nsec="root"] .note-card-text');
+            if (ed) ed.focus();
+          } } },
+        { title: "", divider: true, tight: true, keys: ["lk:" + rest] },
+        { title: "Goals", keys: [...goals.map((g) => "g:" + rest + ":" + g.id), "o:" + rest],
+          action: { label: "Add goal", run: () => openItemSheet({ ref: rest, kind: "goal" }) } },
+        ...(doneGoals.length ? [{ title: `Completed · ${doneGoals.length}`, quiet: true,
+          keys: colShowDone[rest] ? doneGoals.map((g) => "g:" + rest + ":" + g.id) : [],
+          action: { label: colShowDone[rest] ? "Hide" : "Show", toggle: true,
+            run: () => { colShowDone[rest] = !colShowDone[rest]; redrawColumns(); } } }] : []),
+  ];
+}
+
+/* add a project inside a folder */
+function addFolderProject(ref) {
+  const p = containerByRef(ref);
+  if (!p) return;
+  const sheet = sheetOpen({ title: "Add project", body: `<input type="text" data-sheet-name maxlength="60" placeholder="Project name" />`, primary: "Add" });
+  if (!sheet) return;
+  const input = sheet.el.querySelector("[data-sheet-name]");
+  input.focus();
+  const done = () => {
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    if (!p.tracker) p.tracker = { name: "Projects", items: [] };
+    const c = { id: uid(), name, stage: "watch", createdAt: new Date().toISOString() };
+    p.tracker.items.push(c);
+    p.folder = true;
+    ensureSubtree([c], ref.includes("~") ? 2 : 1);
+    persist();
+    sheet.close();
+    colRevealPath(ref + "~" + c.id, []);
+  };
+  sheet.el.querySelector("[data-sheet-ok]").addEventListener("click", done);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") done(); });
+}
+
 function colNode(key) {
   const [kind, rest] = colSplit(key);
   if (kind === "root") {
@@ -1840,15 +1921,47 @@ function colNode(key) {
       ],
     };
   }
-  if (kind === "p") {
+  if (kind === "p" || kind === "pf") {
     const p = containerByRef(rest);
     if (!p) return null;
     const isSub = rest.includes("~");
     const accent = isSub ? kcolor(p.name) : accentFor(rest);
+    if (kind === "p" && isFolder(p)) {
+      const items = p.tracker ? p.tracker.items : [];
+      const live = items.filter((c) => c.stage !== "closed");
+      const closed = items.filter((c) => c.stage === "closed");
+      const leftover = p.notesList.length + p.goals.length + p.tasks.length + p.links.length;
+      return {
+        title: p.name, label: p.name,
+        icon: `<span class="col-tile col-tile-folder" style="--pa:${accent}">${COL_ICONS.folder}</span>`,
+        meta: live.length ? String(live.length) : "",
+        folder: true, isFolder: true,
+        emptyText: "No projects in this folder yet",
+        sections: [
+          { title: "Projects", keys: live.map((c) => "p:" + rest + "~" + c.id),
+            empty: "No projects yet",
+            action: { label: "Add project", run: () => addFolderProject(rest) } },
+          ...(closed.length ? [{ title: `Closed · ${closed.length}`, quiet: true,
+            keys: colShowDone["f:" + rest] ? closed.map((c) => "p:" + rest + "~" + c.id) : [],
+            action: { label: colShowDone["f:" + rest] ? "Hide" : "Show", toggle: true,
+              run: () => { colShowDone["f:" + rest] = !colShowDone["f:" + rest]; redrawColumns(); } } }] : []),
+          // anything still kept on the folder itself stays reachable
+          ...(leftover ? [{ title: "", divider: true, keys: ["pf:" + rest] }] : []),
+        ],
+      };
+    }
     const st = spaceStats(p);
     const subs = p.tracker ? p.tracker.items.filter((c) => c.stage !== "closed") : [];
     const goals = p.goals.filter((g) => !g.done).sort(colTaskSort);
     const doneGoals = p.goals.filter((g) => g.done);
+    if (kind === "pf") return {
+      title: "Kept on the folder", label: "Kept on the folder",
+      icon: `<span class="col-glyph">${COL_ICONS.note}</span>`,
+      meta: String(p.notesList.length + p.goals.length + p.tasks.length + p.links.length),
+      folder: true, quietRow: true,
+      header: () => colSpaceStats(p),
+      sections: spaceSections(p, rest, goals, doneGoals),
+    };
     return {
       title: p.name,
       label: p.name,
@@ -1856,27 +1969,7 @@ function colNode(key) {
       meta: st.open ? `${st.over ? `<span class="col-over-dot" title="${st.over} overdue"></span>` : ""}${st.open}` : "",
       folder: true,
       header: () => colSpaceStats(p),
-      sections: [
-        ...(p.tracker ? [{ title: p.tracker.name, keys: subs.map((c) => "p:" + rest + "~" + c.id) }] : []),
-        { title: "Notes", keys: p.notesList.map((n) => "n:" + rest + ":" + n.id),
-          empty: "No notes yet",
-          action: { label: "Add note", run: () => {
-            const now = new Date().toISOString();
-            const n = { id: uid(), text: "", createdAt: now, updatedAt: now, thread: [] };
-            p.notesList.unshift(n);
-            persist();
-            colRevealPath(rest, ["n:" + rest + ":" + n.id]);
-            const ed = app.querySelector('.col-preview [data-nsec="root"] .note-card-text');
-            if (ed) ed.focus();
-          } } },
-        { title: "", divider: true, tight: true, keys: ["lk:" + rest] },
-        { title: "Goals", keys: [...goals.map((g) => "g:" + rest + ":" + g.id), "o:" + rest],
-          action: { label: "Add goal", run: () => openItemSheet({ ref: rest, kind: "goal" }) } },
-        ...(doneGoals.length ? [{ title: `Completed · ${doneGoals.length}`, quiet: true,
-          keys: colShowDone[rest] ? doneGoals.map((g) => "g:" + rest + ":" + g.id) : [],
-          action: { label: colShowDone[rest] ? "Hide" : "Show", toggle: true,
-            run: () => { colShowDone[rest] = !colShowDone[rest]; redrawColumns(); } } }] : []),
-      ],
+      sections: spaceSections(p, rest, goals, doneGoals),
     };
   }
   if (kind === "g" || kind === "o") {
@@ -2245,7 +2338,7 @@ function colRowHtml(key, selected, depth, showSpace, dates, collId) {
   const trail = n.task ? "" : `${n.meta ? `<span class="col-meta">${n.meta}</span>` : ""}`;
   const sub = n.task ? colTaskSub(n.task, showSpace ? (containerByRef(n.ref) || {}).name : "") : "";
   return `
-    <div class="col-row ${selected ? "selected" : ""} ${n.done ? "is-done" : ""} ${n.task ? "is-task" : ""} ${n.others ? "is-others" : ""}" title="${escapeHtml(n.label)}"
+    <div class="col-row ${selected ? "selected" : ""} ${n.done ? "is-done" : ""} ${n.task ? "is-task" : ""} ${n.others || n.quietRow ? "is-others" : ""}" title="${escapeHtml(n.label)}"
          data-col-key="${escapeHtml(key)}" data-col-depth="${depth}" tabindex="-1" role="option" aria-selected="${selected}">
       ${lead}
       ${sub ? `<span class="col-text"><span class="col-label">${escapeHtml(n.label)}</span>${sub}</span>`
@@ -2310,14 +2403,14 @@ function columnsHtml() {
   else if (!IS_MOBILE && last && last.startsWith("p:")) {
     const ref = colSplit(last)[1];
     const p = containerByRef(ref);
-    if (p) preview = `<div class="colp colp-links">
+    if (p && !isFolder(p)) preview = `<div class="colp colp-links">
         <div class="col-bigtitle"><h2>Links</h2><button class="col-add" data-col-action="lk:${escapeHtml(ref)}|0">${ICONS.plus}<span>Add link</span></button></div>
         ${colLinkCards(p, ref)}
       </div>`;
   }
   if (!preview && !colPath.length && !IS_MOBILE) preview = colUpNextHtml();
   if (preview) cols.push(`<div class="col col-preview ${colPath.length ? "" : "col-upnext"}" data-col="${depth}">${preview}</div>`);
-  else if (colPath.length && cols.length && !lastKey.startsWith("p:")) cols[cols.length - 1] = cols[cols.length - 1].replace('<div class="col ', '<div class="col col-fill ');
+  else if (colPath.length && cols.length && !(lastKey.startsWith("p:") && !isFolder(containerByRef(colSplit(lastKey)[1])))) cols[cols.length - 1] = cols[cols.length - 1].replace('<div class="col ', '<div class="col col-fill ');
 
   const crumbs = keys.map((k) => (colNode(k) || {}).title || (colNode(k) || {}).label || "");
   const backTitle = crumbs.length > 1 ? crumbs[crumbs.length - 2] : "";
@@ -3180,6 +3273,7 @@ function showNewProjectModal() {
       <h3>New project</h3>
       <input type="text" id="np-name" placeholder="Project name" maxlength="60" />
       <input type="text" id="np-desc" placeholder="Short description (optional)" maxlength="140" />
+      <label class="np-folder"><input type="checkbox" id="np-folder" /> <span>Folder<small>holds several projects</small></span></label>
       <div class="row">
         <button class="btn btn-ghost" id="np-cancel">Cancel</button>
         <button class="btn btn-primary" id="np-create">Create</button>
@@ -3212,10 +3306,17 @@ function showNewProjectModal() {
       pos: defaultPos(state.projects.length),
       createdAt: new Date().toISOString(),
     };
+    if (backdrop.querySelector("#np-folder").checked) {
+      project.folder = true;
+      project.tracker = { name: "Projects", items: [] };
+    }
     state.projects.push(project);
     persist();
     close();
-    window.location.hash = "#/p/" + project.id;
+    colPath = ["p:" + project.id];
+    saveColPath();
+    if (window.location.hash && window.location.hash !== "#/") window.location.hash = "#/";
+    else renderDesktop(null);
   }
 
   backdrop.querySelector("#np-create").addEventListener("click", create);
