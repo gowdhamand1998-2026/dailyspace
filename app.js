@@ -1901,6 +1901,85 @@ function addFolderProject(ref) {
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") done(); });
 }
 
+/* ---- ordering: Home's Spaces list, a folder's projects, a collection's items ---- */
+function orderedHomeKeys() {
+  const isOthers = (p) => p.name.trim().toLowerCase() === "others";
+  const spaces = state.projects.filter((p) => onDesktop("project", p.id));
+  const cols = state.collections.filter((c) => !isArchived("collection", c.id));
+  const base = [
+    ...spaces.filter((p) => !isOthers(p)).map((p) => "p:" + p.id),
+    ...cols.map((c) => "c:" + c.id),
+    ...spaces.filter(isOthers).map((p) => "p:" + p.id),
+  ];
+  const order = state.homeOrder || [];
+  const rank = (k, i) => { const j = order.indexOf(k); return j >= 0 ? j : order.length + i; };
+  return base.map((k, i) => [k, rank(k, i)]).sort((a, b) => a[1] - b[1]).map((x) => x[0]);
+}
+
+/* which reorderable list a row belongs to: "home", "f:<folder ref>" or "c:<collection id>" */
+function orderListFor(key) {
+  const [kind, rest] = colSplit(key);
+  if (kind === "c") return "home";
+  if (kind === "p") {
+    if (rest.includes("~")) return "f:" + rest.slice(0, rest.lastIndexOf("~"));
+    const c = state.collections.find((x) => x.items.some((it) => it.type === "project" && it.id === rest));
+    if (c) return "c:" + c.id;
+    return onDesktop("project", rest) ? "home" : null;
+  }
+  if (kind === "l") {
+    const c = state.collections.find((x) => x.items.some((it) => it.type === "link" && it.id === rest));
+    return c ? "c:" + c.id : null;
+  }
+  return null;
+}
+
+/* the list as [array, keyOf, save] so one mover handles all three */
+function orderList(list) {
+  if (list === "home") {
+    const arr = orderedHomeKeys();
+    return { arr, keyOf: (k) => k, save: (a) => { state.homeOrder = a; } };
+  }
+  const [kind, id] = colSplit(list);
+  if (kind === "f") {
+    const p = containerByRef(id);
+    if (!p || !p.tracker) return null;
+    return { arr: p.tracker.items.slice(), keyOf: (c) => "p:" + id + "~" + c.id, save: (a) => { p.tracker.items = a; } };
+  }
+  if (kind === "c") {
+    const c = state.collections.find((x) => x.id === id);
+    if (!c) return null;
+    return { arr: c.items.slice(), keyOf: (it) => (it.type === "project" ? "p:" : "l:") + it.id, save: (a) => { c.items = a; } };
+  }
+  return null;
+}
+
+/* move one row next to another (drag) or one step up/down (menu) */
+function colMove(list, key, { target, after, step } = {}) {
+  const L = orderList(list);
+  if (!L) return;
+  const from = L.arr.findIndex((x) => L.keyOf(x) === key);
+  if (from < 0) return;
+  const [item] = L.arr.splice(from, 1);
+  let to;
+  if (step) {
+    // step past the next row you can see (a folder's hidden closed projects don't count)
+    const vis = [...app.querySelectorAll(`[data-order="${CSS.escape(list)}"]`)].map((r) => r.dataset.colKey);
+    const seq = vis.length ? vis : [...L.arr.slice(0, from).map(L.keyOf), key, ...L.arr.slice(from).map(L.keyOf)];
+    const nk = seq[seq.indexOf(key) + step];
+    const t = nk ? L.arr.findIndex((x) => L.keyOf(x) === nk) : -1;
+    if (t < 0) { L.arr.splice(from, 0, item); return; }
+    to = step > 0 ? t + 1 : t;
+  } else {
+    const t = L.arr.findIndex((x) => L.keyOf(x) === target);
+    if (t < 0) { L.arr.splice(from, 0, item); return; }
+    to = after ? t + 1 : t;
+  }
+  L.arr.splice(to, 0, item);
+  L.save(L.arr);
+  persist();
+  redrawColumns(key);
+}
+
 function colNode(key) {
   const [kind, rest] = colSplit(key);
   if (kind === "root") {
@@ -1913,10 +1992,7 @@ function colNode(key) {
       title: "Home",
       sections: [
         // one list: single projects, folders of projects, and collections (also folders)
-        { title: "Spaces", keys: [
-            ...spaces.filter((p) => !isOthers(p)).map((p) => "p:" + p.id),
-            ...cols.map((c) => "c:" + c.id),
-            ...spaces.filter(isOthers).map((p) => "p:" + p.id)],
+        { title: "Spaces", order: "home", keys: orderedHomeKeys(),
           action: { label: "Add space", run: () => showNewProjectModal() } },
         { title: "", divider: true, keys: ["links"] },
         { title: "Lists", keys: [...Object.keys(WIDGETS).map((k) => "w:" + k), "people"] },
@@ -1940,7 +2016,7 @@ function colNode(key) {
         folder: true, isFolder: true,
         emptyText: "No projects in this folder yet",
         sections: [
-          { title: "", keys: live.map((c) => "p:" + rest + "~" + c.id),
+          { title: "", order: "f:" + rest, keys: live.map((c) => "p:" + rest + "~" + c.id),
             empty: "No projects yet",
             action: { label: "Add project", run: () => addFolderProject(rest) } },
           ...(closed.length ? [{ title: `Closed · ${closed.length}`, quiet: true,
@@ -2099,7 +2175,7 @@ function colNode(key) {
       meta: String(c.items.length), folder: true,
       collection: c.id,
       emptyText: "Nothing in this collection yet",
-      sections: [{ title: "", keys: c.items
+      sections: [{ title: "", order: "c:" + c.id, keys: c.items
         .filter((it) => it.type === "project" ? getProject(it.id) : state.links.some((l) => l.id === it.id))
         .map((it) => (it.type === "project" ? "p:" : "l:") + it.id) }],
     };
@@ -2371,7 +2447,7 @@ function columnsHtml() {
         ${s.action ? `<button class="col-add ${s.action.toggle ? "col-toggle" : ""}" data-col-action="${escapeHtml(keys[depth])}|${si}" title="${escapeHtml(s.action.label)}" aria-label="${escapeHtml(s.action.label)}">${s.action.toggle ? "" : ICONS.plus}<span>${escapeHtml(s.action.label)}</span></button>` : ""}
       </div>` : ""}
       ${table && s.keys.length ? `<div class="col-thead"><span>Task</span><span class="col-dates"><span>Added</span><span>Done</span></span><span class="col-more col-more-blank"></span></div>` : ""}
-      ${s.keys.map((k) => colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]), table, node.collection)
+      ${s.keys.map((k) => (s.order ? colRowHtml(k, k === sel, depth, false, table, node.collection).replace('<div class="col-row ', `<div draggable="true" data-order="${escapeHtml(s.order)}" class="col-row `) : colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]), table, node.collection))
         + (inlineAt === depth && k === sel ? (k.startsWith("pl:") ? colLinkInline(k) : colTaskInline(k)) : "")).join("")}
       ${!s.keys.length && s.empty ? `<div class="col-hint">${escapeHtml(s.empty)}</div>` : ""}
     ` : "").join("");
@@ -2519,6 +2595,36 @@ function wireColumns() {
     const right = scroller.querySelector(".col-fill, .col-preview");
     if (colPath.length >= 2 && (scroller.scrollWidth > scroller.clientWidth + 4 || (right && right.clientWidth < 520))) root.classList.add("cols-rail");
   }
+  let drag = null;
+  const clearDrop = () => root.querySelectorAll(".drop-above, .drop-below").forEach((r) => r.classList.remove("drop-above", "drop-below"));
+  root.querySelectorAll("[data-order]").forEach((row) => {
+    row.addEventListener("dragstart", (e) => {
+      drag = { key: row.dataset.colKey, list: row.dataset.order };
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", drag.key); } catch {}
+      requestAnimationFrame(() => row.classList.add("dragging"));
+    });
+    row.addEventListener("dragend", () => { row.classList.remove("dragging"); clearDrop(); drag = null; });
+    row.addEventListener("dragover", (e) => {
+      if (!drag || drag.list !== row.dataset.order || drag.key === row.dataset.colKey) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const r = row.getBoundingClientRect();
+      const below = e.clientY > r.top + r.height / 2;
+      clearDrop();
+      row.classList.add(below ? "drop-below" : "drop-above");
+    });
+    row.addEventListener("dragleave", () => row.classList.remove("drop-above", "drop-below"));
+    row.addEventListener("drop", (e) => {
+      if (!drag || drag.list !== row.dataset.order || drag.key === row.dataset.colKey) return;
+      e.preventDefault();
+      const after = row.classList.contains("drop-below");
+      const d = drag;
+      clearDrop();
+      drag = null;
+      colMove(d.list, d.key, { target: row.dataset.colKey, after });
+    });
+  });
   root.querySelectorAll("[data-coll-remove]").forEach((b) => b.addEventListener("click", (e) => {
     e.stopPropagation();
     const [cid, ...rest] = b.dataset.collRemove.split("|");
@@ -2932,6 +3038,12 @@ function colMenu(key) {
       state.archived.push({ type: "collection", id: rest });
       persist(); colDropFromPath(key);
     } });
+  }
+  const ol = orderListFor(key);
+  if (ol) {
+    if (items.length && !items[items.length - 1].sep) items.push({ sep: true });
+    items.push({ label: "Move up", run: () => colMove(ol, key, { step: -1 }) });
+    items.push({ label: "Move down", run: () => colMove(ol, key, { step: 1 }) });
   }
   if (t && t.remove) {
     if (!items.length || !items[items.length - 1].sep) items.push({ sep: true });

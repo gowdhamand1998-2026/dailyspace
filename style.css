@@ -4242,3 +4242,13 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .col-tile.col-tile-folder svg { width: 17px; height: 17px; color: var(--text-2); }
 .col-active .col-row.selected .col-tile-folder { background: none; }
 .col-active .col-row.selected .col-tile-folder svg { color: #fff; }
+
+/* reordering: a line shows where the row will land */
+.col-row[draggable="true"] { position: relative; }
+.col-row.dragging { opacity: .4; }
+.col-row.drop-above::after, .col-row.drop-below::after {
+  content: ""; position: absolute; left: 8px; right: 8px; height: 2px; border-radius: 2px;
+  background: var(--select); pointer-events: none;
+}
+.col-row.drop-above::after { top: -2px; }
+.col-row.drop-below::after { bottom: -2px; }
