@@ -4252,3 +4252,17 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 }
 .col-row.drop-above::after { top: -2px; }
 .col-row.drop-below::after { bottom: -2px; }
+
+/* pick up and drop: the lifted row floats under the pointer, its slot stays as a soft gap */
+.row-ghost {
+  position: fixed; z-index: 1000; pointer-events: none; margin: 0;
+  background: color-mix(in srgb, var(--bg, #15161a) 80%, #3a3d46); border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.08);
+  transform: scale(1.02); opacity: .97;
+}
+.col-row.row-lifted { opacity: .25; }
+.col-row.row-lifted * { visibility: hidden; }
+.col-row.row-lifted { background: rgba(255,255,255,.04) !important; }
+body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user-select: none !important; }
+.col-row[data-order] { -webkit-user-drag: none; -webkit-touch-callout: none; }
+.col-row[data-order] img { -webkit-user-drag: none; pointer-events: none; }

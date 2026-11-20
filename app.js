@@ -1916,23 +1916,6 @@ function orderedHomeKeys() {
   return base.map((k, i) => [k, rank(k, i)]).sort((a, b) => a[1] - b[1]).map((x) => x[0]);
 }
 
-/* which reorderable list a row belongs to: "home", "f:<folder ref>" or "c:<collection id>" */
-function orderListFor(key) {
-  const [kind, rest] = colSplit(key);
-  if (kind === "c") return "home";
-  if (kind === "p") {
-    if (rest.includes("~")) return "f:" + rest.slice(0, rest.lastIndexOf("~"));
-    const c = state.collections.find((x) => x.items.some((it) => it.type === "project" && it.id === rest));
-    if (c) return "c:" + c.id;
-    return onDesktop("project", rest) ? "home" : null;
-  }
-  if (kind === "l") {
-    const c = state.collections.find((x) => x.items.some((it) => it.type === "link" && it.id === rest));
-    return c ? "c:" + c.id : null;
-  }
-  return null;
-}
-
 /* the list as [array, keyOf, save] so one mover handles all three */
 function orderList(list) {
   if (list === "home") {
@@ -1953,31 +1936,115 @@ function orderList(list) {
   return null;
 }
 
-/* move one row next to another (drag) or one step up/down (menu) */
-function colMove(list, key, { target, after, step } = {}) {
+/* save a list in the order its rows now sit on screen (hidden rows keep their slots) */
+function colSetOrder(list, keys) {
   const L = orderList(list);
   if (!L) return;
-  const from = L.arr.findIndex((x) => L.keyOf(x) === key);
-  if (from < 0) return;
-  const [item] = L.arr.splice(from, 1);
-  let to;
-  if (step) {
-    // step past the next row you can see (a folder's hidden closed projects don't count)
-    const vis = [...app.querySelectorAll(`[data-order="${CSS.escape(list)}"]`)].map((r) => r.dataset.colKey);
-    const seq = vis.length ? vis : [...L.arr.slice(0, from).map(L.keyOf), key, ...L.arr.slice(from).map(L.keyOf)];
-    const nk = seq[seq.indexOf(key) + step];
-    const t = nk ? L.arr.findIndex((x) => L.keyOf(x) === nk) : -1;
-    if (t < 0) { L.arr.splice(from, 0, item); return; }
-    to = step > 0 ? t + 1 : t;
-  } else {
-    const t = L.arr.findIndex((x) => L.keyOf(x) === target);
-    if (t < 0) { L.arr.splice(from, 0, item); return; }
-    to = after ? t + 1 : t;
-  }
-  L.arr.splice(to, 0, item);
-  L.save(L.arr);
+  const shown = new Set(keys);
+  const byKey = new Map(L.arr.map((x) => [L.keyOf(x), x]));
+  let i = 0;
+  const next = L.arr.map((x) => (shown.has(L.keyOf(x)) ? byKey.get(keys[i++]) : x));
+  if (next.every((x, j) => x === L.arr[j])) return;
+  L.save(next);
   persist();
-  redrawColumns(key);
+}
+
+/* pick a row up and drop it: mouse drags after a small move, touch after a short hold.
+   The row lifts and follows the pointer; the others slide out of its way. */
+let rowDragging = false;
+function wireRowDrag(row) {
+  const list = row.dataset.order;
+  let start = null, timer = null, ghost = null, offY = 0, lastY = 0, scrollTimer = null;
+  const siblings = () => [...row.parentElement.querySelectorAll(`:scope > [data-order="${CSS.escape(list)}"]`)];
+  const body = () => row.closest(".col-body");
+
+  const begin = (y) => {
+    rowDragging = true;
+    const r = row.getBoundingClientRect();
+    offY = y - r.top;
+    ghost = row.cloneNode(true);
+    ghost.classList.add("row-ghost");
+    ghost.classList.remove("selected");
+    Object.assign(ghost.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+    document.body.appendChild(ghost);
+    row.classList.add("row-lifted");
+    document.body.classList.add("is-row-dragging");
+    if (navigator.vibrate) try { navigator.vibrate(8); } catch {}
+  };
+  const move = (y) => {
+    lastY = y;
+    ghost.style.top = (y - offY) + "px";
+    // slide: the lifted row takes the place the pointer is over
+    const others = siblings().filter((s) => s !== row);
+    const before = others.find((s) => { const r = s.getBoundingClientRect(); return y < r.top + r.height / 2; });
+    const old = siblings().map((s) => [s, s.getBoundingClientRect().top]);
+    if (before) { if (row.nextElementSibling !== before) before.before(row); }
+    else if (others.length) { const last = others[others.length - 1]; if (last.nextElementSibling !== row) last.after(row); }
+    // animate the rows that shifted
+    old.forEach(([s, top]) => {
+      if (s === row) return;
+      const d = top - s.getBoundingClientRect().top;
+      if (!d) return;
+      s.animate([{ transform: `translateY(${d}px)` }, { transform: "translateY(0)" }], { duration: 160, easing: "ease-out" });
+    });
+    // keep scrolling when you hold near the edge of a long column
+    const bd = body();
+    clearInterval(scrollTimer);
+    if (bd) {
+      const br = bd.getBoundingClientRect();
+      const dir = y < br.top + 40 ? -1 : y > br.bottom - 40 ? 1 : 0;
+      if (dir) scrollTimer = setInterval(() => { bd.scrollTop += dir * 8; move(lastY); }, 16);
+    }
+  };
+  const finish = () => {
+    clearTimeout(timer); clearInterval(scrollTimer);
+    timer = null; start = null;
+    if (!ghost) return;
+    ghost.remove(); ghost = null;
+    row.classList.remove("row-lifted");
+    document.body.classList.remove("is-row-dragging");
+    // the click that ends a drag doesn't also open the row
+    const eat = (e) => { e.stopPropagation(); e.preventDefault(); };
+    window.addEventListener("click", eat, { capture: true, once: true });
+    setTimeout(() => { window.removeEventListener("click", eat, { capture: true }); rowDragging = false; }, 0);
+    colSetOrder(list, siblings().map((s) => s.dataset.colKey));
+    redrawColumns(row.dataset.colKey === colPath[colPath.length - 1] ? row.dataset.colKey : colPath[colPath.length - 1]);
+  };
+
+  // mouse / pen
+  row.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "touch" || e.button !== 0) return;
+    if (e.target.closest("button, input, [contenteditable]")) return;
+    start = { x: e.clientX, y: e.clientY };
+    const onMove = (ev) => {
+      if (!start) return;
+      if (!ghost) {
+        if (Math.abs(ev.clientY - start.y) < 5 && Math.abs(ev.clientX - start.x) < 5) return;
+        begin(start.y);
+      }
+      ev.preventDefault();
+      move(ev.clientY);
+    };
+    const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); finish(); };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+  // touch: hold, then drag (a quick swipe still scrolls)
+  row.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1 || e.target.closest("button, input")) return;
+    const t = e.touches[0];
+    start = { x: t.clientX, y: t.clientY };
+    timer = setTimeout(() => { timer = null; begin(start.y); move(start.y); }, 320);
+  }, { passive: true });
+  row.addEventListener("touchmove", (e) => {
+    const t = e.touches[0];
+    if (ghost) { e.preventDefault(); move(t.clientY); return; }
+    if (timer && start && (Math.abs(t.clientY - start.y) > 8 || Math.abs(t.clientX - start.x) > 8)) { clearTimeout(timer); timer = null; }
+  }, { passive: false });
+  row.addEventListener("touchend", () => finish());
+  row.addEventListener("touchcancel", () => finish());
+  // a hold that becomes a drag shouldn't pop the menu
+  row.addEventListener("contextmenu", (e) => { if (ghost || rowDragging) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
 }
 
 function colNode(key) {
@@ -2447,7 +2514,7 @@ function columnsHtml() {
         ${s.action ? `<button class="col-add ${s.action.toggle ? "col-toggle" : ""}" data-col-action="${escapeHtml(keys[depth])}|${si}" title="${escapeHtml(s.action.label)}" aria-label="${escapeHtml(s.action.label)}">${s.action.toggle ? "" : ICONS.plus}<span>${escapeHtml(s.action.label)}</span></button>` : ""}
       </div>` : ""}
       ${table && s.keys.length ? `<div class="col-thead"><span>Task</span><span class="col-dates"><span>Added</span><span>Done</span></span><span class="col-more col-more-blank"></span></div>` : ""}
-      ${s.keys.map((k) => (s.order ? colRowHtml(k, k === sel, depth, false, table, node.collection).replace('<div class="col-row ', `<div draggable="true" data-order="${escapeHtml(s.order)}" class="col-row `) : colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]), table, node.collection))
+      ${s.keys.map((k) => (s.order ? colRowHtml(k, k === sel, depth, false, table, node.collection).replace('<div class="col-row ', `<div data-order="${escapeHtml(s.order)}" class="col-row `) : colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]), table, node.collection))
         + (inlineAt === depth && k === sel ? (k.startsWith("pl:") ? colLinkInline(k) : colTaskInline(k)) : "")).join("")}
       ${!s.keys.length && s.empty ? `<div class="col-hint">${escapeHtml(s.empty)}</div>` : ""}
     ` : "").join("");
@@ -2595,36 +2662,7 @@ function wireColumns() {
     const right = scroller.querySelector(".col-fill, .col-preview");
     if (colPath.length >= 2 && (scroller.scrollWidth > scroller.clientWidth + 4 || (right && right.clientWidth < 520))) root.classList.add("cols-rail");
   }
-  let drag = null;
-  const clearDrop = () => root.querySelectorAll(".drop-above, .drop-below").forEach((r) => r.classList.remove("drop-above", "drop-below"));
-  root.querySelectorAll("[data-order]").forEach((row) => {
-    row.addEventListener("dragstart", (e) => {
-      drag = { key: row.dataset.colKey, list: row.dataset.order };
-      e.dataTransfer.effectAllowed = "move";
-      try { e.dataTransfer.setData("text/plain", drag.key); } catch {}
-      requestAnimationFrame(() => row.classList.add("dragging"));
-    });
-    row.addEventListener("dragend", () => { row.classList.remove("dragging"); clearDrop(); drag = null; });
-    row.addEventListener("dragover", (e) => {
-      if (!drag || drag.list !== row.dataset.order || drag.key === row.dataset.colKey) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      const r = row.getBoundingClientRect();
-      const below = e.clientY > r.top + r.height / 2;
-      clearDrop();
-      row.classList.add(below ? "drop-below" : "drop-above");
-    });
-    row.addEventListener("dragleave", () => row.classList.remove("drop-above", "drop-below"));
-    row.addEventListener("drop", (e) => {
-      if (!drag || drag.list !== row.dataset.order || drag.key === row.dataset.colKey) return;
-      e.preventDefault();
-      const after = row.classList.contains("drop-below");
-      const d = drag;
-      clearDrop();
-      drag = null;
-      colMove(d.list, d.key, { target: row.dataset.colKey, after });
-    });
-  });
+  root.querySelectorAll("[data-order]").forEach((row) => wireRowDrag(row));
   root.querySelectorAll("[data-coll-remove]").forEach((b) => b.addEventListener("click", (e) => {
     e.stopPropagation();
     const [cid, ...rest] = b.dataset.collRemove.split("|");
@@ -3038,12 +3076,6 @@ function colMenu(key) {
       state.archived.push({ type: "collection", id: rest });
       persist(); colDropFromPath(key);
     } });
-  }
-  const ol = orderListFor(key);
-  if (ol) {
-    if (items.length && !items[items.length - 1].sep) items.push({ sep: true });
-    items.push({ label: "Move up", run: () => colMove(ol, key, { step: -1 }) });
-    items.push({ label: "Move down", run: () => colMove(ol, key, { step: 1 }) });
   }
   if (t && t.remove) {
     if (!items.length || !items[items.length - 1].sep) items.push({ sep: true });
