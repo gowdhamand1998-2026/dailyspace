@@ -4379,3 +4379,19 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 .cal-edit-row { flex-wrap: wrap; }
 .cal-edit-row input[type="time"] { flex: 1; min-width: 0; }
 .cal-edit-row select { flex: 1 0 100%; }
+
+/* calendar and draft share the screen half and half; the draft side is a real workspace */
+@media (min-width: 701px) {
+  .cal-scroll { flex: 1 1 50%; }
+  .cal-grid { max-width: none; }
+  .cal-side { flex: 1 1 50%; width: auto; min-width: 380px; padding: 28px 36px 120px; gap: 16px; }
+  .cal-side > * { max-width: 680px; }
+  .cal-side-head h3 { font-size: 20px; letter-spacing: -.01em; }
+  .cal-input { font-size: 15px; line-height: 1.55; padding: 14px 16px; border-radius: 12px; }
+  .cal-input[data-cal-input] { min-height: 220px; }
+  .cal-input[data-cal-change] { min-height: 96px; }
+  .cal-summary { font-size: 15px; }
+  .cal-list p { font-size: 13.5px; }
+  .cal-hint { font-size: 12.5px; }
+  .cal-rules { min-height: 60vh; font-size: 14px; line-height: 1.6; }
+}
