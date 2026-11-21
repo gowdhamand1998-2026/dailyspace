@@ -4502,3 +4502,26 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 .cal-go, .cal-ai-btn { display: inline-flex; align-items: center; gap: 7px; }
 .cal-ai-btn .cal-spark { width: 13px; height: 13px; }
 .cal-go .cal-spark { width: 16px !important; height: 16px !important; flex-shrink: 0; }
+
+/* two ways to start: a one-tap quick draft, or describe the day first */
+.cal-quick {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 16px 18px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.035);
+}
+.cal-quick-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal-quick-text b { font-size: 14.5px; font-weight: 600; color: var(--text); }
+.cal-quick-text span { font-size: 13px; color: var(--text-3); }
+.cal-quick .cal-go { flex-shrink: 0; align-self: center; }
+.cal-or { display: flex; align-items: center; gap: 12px; margin: 6px 0 -2px; font-size: 12px; color: var(--text-3); }
+.cal-or::before, .cal-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.cal-go-details { align-self: flex-start; height: 34px; padding: 0 14px 0 12px; font-size: 13.5px; }
+.cal-go-details[disabled] { opacity: .45; cursor: default; }
+.cal-go-details.is-ready { color: #0d0e11; background: var(--text); }
+.cal-go-details.is-ready:hover { background: #fff; }
+@media (max-width: 700px) {
+  .cal-quick { flex-direction: column; align-items: stretch; }
+  .cal-quick .cal-go { justify-content: center; }
+}
+/* once details are typed, that button leads and the quick draft steps back */
+.cal-side:has(.cal-go-details.is-ready) [data-cal-quick] { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.cal-side:has(.cal-go-details.is-ready) [data-cal-quick]:hover { background: rgba(255,255,255,.08); }

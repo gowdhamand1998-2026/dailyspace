@@ -137,11 +137,11 @@ function calSamplePlan(k, tasks) {
   };
 }
 
-async function calGenerate({ instruction } = {}) {
+async function calGenerate({ instruction, quick } = {}) {
   if (calBusy) return;
   const k = calDay;
   const day = calDayData(k);
-  const input = (app.querySelector("[data-cal-input]") || {}).value || "";
+  const input = quick ? "" : (app.querySelector("[data-cal-input]") || {}).value || "";
   const tasks = calTasks();
   const now = new Date();
   const payload = {
@@ -255,6 +255,7 @@ function calStartMic(button) {
     }
     box.value = (base + finalText + interim).replace(/\s+$/, interim ? "" : " ");
     box.scrollTop = box.scrollHeight;
+    box.dispatchEvent(new Event("input", { bubbles: true })); // so anything watching the box sees spoken text too
   };
   rec.onerror = (e) => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed") calError = "The browser blocked the microphone. Allow it in the address bar, then try again.";
@@ -301,8 +302,13 @@ function calSideHtml(day) {
     return `
       ${day.blocks.length ? `<div class="cal-side-head"><h3>Plan</h3><span class="cal-draft-tag">accepted</span></div>${calAgendaHtml(day.blocks)}<div class="cal-sep"></div>` : ""}
       <div class="cal-side-head"><h3>${day.blocks.length ? "Plan again" : "Plan Nikhel's day"}</h3></div>
-      ${calBoxHtml("data-cal-input", 5, "Optional. Type or tap Speak: meetings, when Nikhel is free, what has to happen.\n\nLeave it empty and the draft comes from Nikhel's tasks and the planning rules.")}
-      <button class="btn btn-primary cal-go" data-cal-generate>${CAL_SPARK_SVG}Generate draft</button>
+      <div class="cal-quick">
+        <div class="cal-quick-text"><b>Quick draft</b><span>From Nikhel's tasks and the planning rules</span></div>
+        <button class="btn btn-primary cal-go" data-cal-generate data-cal-quick>${CAL_SPARK_SVG}Generate draft</button>
+      </div>
+      <div class="cal-or"><span>or describe the day</span></div>
+      ${calBoxHtml("data-cal-input", 5, "Meetings, when Nikhel is free, anything that has to happen. Type it, or tap Speak.")}
+      <button class="col-act cal-ai-btn cal-go-details" data-cal-generate disabled>${CAL_SPARK_SVG}Generate with these details</button>
       ${calError ? `<p class="cal-error">${escapeHtml(calError)}</p>` : ""}`;
   }
   return `
@@ -401,7 +407,13 @@ function wireCalendar(day) {
   app.querySelectorAll("[data-cal-mic]").forEach((b) => b.addEventListener("click", () => {
     if (calRec && calRec.button === b) calStopMic(); else calStartMic(b);
   }));
-  $("[data-cal-generate]")?.addEventListener("click", () => calGenerate());
+  app.querySelectorAll("[data-cal-generate]").forEach((b) => b.addEventListener("click", () => calGenerate({ quick: b.hasAttribute("data-cal-quick") })));
+  // "Generate with these details" wakes up once there's something in the box (typed or spoken)
+  const detailsBox = $("[data-cal-input]"), detailsBtn = $(".cal-go-details");
+  if (detailsBox && detailsBtn) {
+    const sync = () => { const on = !!detailsBox.value.trim(); detailsBtn.disabled = !on; detailsBtn.classList.toggle("is-ready", on); };
+    detailsBox.addEventListener("input", sync);
+  }
   $("[data-cal-input]")?.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) calGenerate(); });
   const change = $("[data-cal-change]");
   const update = () => { const v = change.value.trim(); if (v) calGenerate({ instruction: v }); else change.focus(); };
