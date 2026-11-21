@@ -100,12 +100,20 @@ function calClean(plan, tasks) {
 }
 
 /* until the AI key is added: a plain layout from the rules and tasks, clearly labelled */
-function calSamplePlan(k, tasks) {
+/* working hours and lunch as written in the planning rules (null when a rule isn't there) */
+function calRuleTimes() {
   const rules = calStore().rules;
-  const hours = /working hours[^0-9]*(\d{1,2}:\d{2})\D+(\d{1,2}:\d{2})/i.exec(rules);
-  const lunch = /lunch[^0-9]*(\d{1,2}:\d{2})\D+(\d{1,2}:\d{2})/i.exec(rules);
-  const dayS = hours ? calMin(hours[1]) : 570, dayE = hours ? calMin(hours[2]) : 1110;
-  const lS = lunch ? calMin(lunch[1]) : 780, lE = lunch ? calMin(lunch[2]) : 840;
+  const pick = (re) => { const m = re.exec(rules); if (!m) return null; const a = calMin(m[1]), b = calMin(m[2]); return Number.isFinite(a) && Number.isFinite(b) && b > a ? [a, b] : null; };
+  return {
+    hours: pick(/working hours[^0-9\n]*(\d{1,2}:\d{2})[^0-9\n]+(\d{1,2}:\d{2})/i),
+    lunch: pick(/lunch[^0-9\n]*(\d{1,2}:\d{2})[^0-9\n]+(\d{1,2}:\d{2})/i),
+  };
+}
+
+function calSamplePlan(k, tasks) {
+  const rt = calRuleTimes();
+  const dayS = rt.hours ? rt.hours[0] : 570, dayE = rt.hours ? rt.hours[1] : 1110;
+  const lS = rt.lunch ? rt.lunch[0] : 780, lE = rt.lunch ? rt.lunch[1] : 840;
   const nowD = new Date();
   let t = dayS;
   if (k === dateKey(nowD)) t = Math.max(t, Math.ceil((nowD.getHours() * 60 + nowD.getMinutes()) / 15) * 15);
@@ -334,6 +342,11 @@ function renderCalendarPage() {
 
   const hours = [];
   for (let m = CAL_START; m <= CAL_END; m += 60) hours.push(m);
+  const rt = calRuleTimes();
+  const shown = day.draft ? draft : accepted;
+  // lunch stays blocked on every day unless the plan already has its own lunch slot
+  const fixedLunch = rt.lunch && !shown.some((b) => b.kind === "lunch") ? rt.lunch : null;
+  const ypx = (m) => (Math.max(CAL_START, Math.min(CAL_END, m)) - CAL_START) * CAL_PX;
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const prevScroll = app.querySelector("[data-cal-scroll]")?.scrollTop;
@@ -341,25 +354,28 @@ function renderCalendarPage() {
   app.innerHTML = `
     <div class="calpage">
       <div class="cal-bar">
-        <button class="cal-back" data-cal-back aria-label="Back to Home"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg><span>Home</span></button>
-        <div class="cal-nav">
-          <button class="cal-nav-btn" data-cal-step="-1" aria-label="Previous day">‹</button>
-          <button class="col-act" data-cal-today ${isToday ? "disabled" : ""}>Today</button>
-          <button class="cal-nav-btn" data-cal-step="1" aria-label="Next day">›</button>
+        <button class="cal-bar-btn cal-back" data-cal-back aria-label="Back to Home"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg><span>Home</span></button>
+        <span class="cal-bar-sep" aria-hidden="true"></span>
+        <div class="cal-seg" role="group" aria-label="Change day">
+          <button class="cal-seg-btn" data-cal-today ${isToday ? "disabled" : ""}>Today</button>
+          <button class="cal-seg-btn cal-seg-icon" data-cal-step="-1" aria-label="Previous day"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <button class="cal-seg-btn cal-seg-icon" data-cal-step="1" aria-label="Next day"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
         </div>
-        <div class="cal-date"><b>${escapeHtml(date.toLocaleDateString("en-GB", { weekday: "long" }))}</b> ${escapeHtml(date.toLocaleDateString("en-GB", { day: "numeric", month: "long" }))}</div>
-        <span class="cal-who">Nikhel's day</span>
-        <button class="col-act cal-rules-btn ${calRulesOpen ? "is-on" : ""}" data-cal-rules>Planning rules</button>
+        <h1 class="cal-title">${escapeHtml(date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }))}</h1>
+        <span class="cal-sub">Nikhel's day</span>
+        <button class="cal-bar-btn cal-rules-btn ${calRulesOpen ? "is-on" : ""}" data-cal-rules>Planning rules</button>
       </div>
       <div class="cal-body">
         <div class="cal-scroll" data-cal-scroll>
           <div class="cal-grid" style="height:${(CAL_END - CAL_START) * CAL_PX}px">
             ${hours.map((m) => `<div class="cal-hour" style="top:${(m - CAL_START) * CAL_PX}px"><span>${calLabel(m)}</span></div>`).join("")}
             <div class="cal-lane" data-cal-lane>
+              ${rt.hours ? `<div class="cal-off" style="top:0;height:${ypx(rt.hours[0])}px"></div><div class="cal-off" style="top:${ypx(rt.hours[1])}px;bottom:0"></div>` : ""}
+              ${fixedLunch ? `<div class="cal-fixed k-lunch" style="top:${ypx(fixedLunch[0])}px;height:${Math.max(18, ypx(fixedLunch[1]) - ypx(fixedLunch[0]) - 2)}px" title="Blocked every day by the planning rules"><div class="cal-block-title">Lunch</div><div class="cal-block-meta">${calLabel(fixedLunch[0])} – ${calLabel(fixedLunch[1])} · every day</div></div>` : ""}
               ${ghosts.map((b) => `<div class="cal-ghost" style="top:${(calMin(b.start) - CAL_START) * CAL_PX}px;height:${Math.max(14, (calMin(b.end) - calMin(b.start)) * CAL_PX - 2)}px"></div>`).join("")}
               ${lanes.map((it) => calBlockHtml(it, it.b._d)).join("")}
               ${isToday && nowMin > CAL_START && nowMin < CAL_END ? `<div class="cal-now" style="top:${(nowMin - CAL_START) * CAL_PX}px"></div>` : ""}
-              ${!lanes.length && !calBusy ? `<div class="cal-empty">Nothing planned yet. Generate a draft on the right.</div>` : ""}
+              ${!lanes.length && !calBusy ? `<div class="cal-empty" style="top:${ypx(rt.hours ? rt.hours[0] : 9 * 60) + 24}px">Nothing planned yet. Generate a draft on the right.</div>` : ""}
             </div>
           </div>
         </div>

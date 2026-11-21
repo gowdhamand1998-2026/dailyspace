@@ -4462,3 +4462,40 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 .cal-mic.is-on svg { animation: cal-mic-pulse 1.2s ease-in-out infinite; }
 @keyframes cal-mic-pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .cal-mic.is-on svg { animation: none; } }
+
+/* top bar: one row, one height, one type size */
+.cal-bar { height: 60px; gap: 12px; padding: 0 24px; }
+.cal-bar-btn, .cal-seg-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  height: 32px; padding: 0 12px; border-radius: 8px;
+  font: 500 13.5px/1 var(--sans); color: var(--text-2); background: transparent;
+  transition: background .15s, color .15s;
+}
+.cal-bar-btn:hover, .cal-seg-btn:hover:not([disabled]) { color: var(--text); background: rgba(255,255,255,.07); }
+.cal-back { padding: 0 12px 0 6px; }
+.cal-bar-sep { width: 1px; height: 20px; background: var(--line); }
+.cal-seg { display: inline-flex; align-items: center; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.cal-seg-btn { height: 30px; border-radius: 0; }
+.cal-seg-btn + .cal-seg-btn { border-left: 1px solid var(--line); }
+.cal-seg-icon { width: 32px; padding: 0; }
+.cal-seg-btn[disabled] { color: var(--text-3); cursor: default; }
+.cal-title { margin: 0 0 0 4px; font: 600 17px/1 var(--sans); letter-spacing: -.01em; color: var(--text); white-space: nowrap; }
+.cal-sub { font: 400 13.5px/1 var(--sans); color: var(--text-3); white-space: nowrap; }
+.cal-sub::before { content: "·"; margin-right: 10px; }
+.cal-rules-btn { margin-left: auto; border: 1px solid var(--line); }
+.cal-rules-btn.is-on { color: var(--text); background: rgba(255,255,255,.1); }
+
+/* fixed by the rules: lunch every day, and the hours outside the working day */
+.cal-off { position: absolute; left: -4px; right: 0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.018) 0 6px, transparent 6px 12px); pointer-events: none; }
+.cal-fixed {
+  --k: #fbbf24;
+  position: absolute; left: 2px; right: 4px; padding: 5px 9px; border-radius: 8px; pointer-events: auto; cursor: default;
+  background: color-mix(in srgb, var(--k) 12%, #16171b); border: 1px solid color-mix(in srgb, var(--k) 28%, transparent); border-left: 3px solid color-mix(in srgb, var(--k) 70%, transparent);
+}
+.cal-fixed .cal-block-title { color: var(--text-2); }
+
+@media (max-width: 700px) {
+  .cal-bar { height: auto; padding: 10px 14px; gap: 8px 10px; }
+  .cal-bar-sep, .cal-sub { display: none; }
+  .cal-title { order: 5; width: 100%; margin: 4px 0 0; font-size: 18px; }
+}
