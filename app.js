@@ -168,6 +168,27 @@ function moveFolderNotes(s) {
   s.migFolderNotes = true;
 }
 
+/* N = on Nikhel's plate. A task counts when it's tagged, or its goal is. */
+function isForNikhel(task, container) {
+  if (!task) return false;
+  if (task.n) return true;
+  const g = task.goalId && container && container.goals.find((x) => x.id === task.goalId);
+  return !!(g && g.n);
+}
+
+/* once: goals and tasks already written "N to ..." / "N: ..." start tagged */
+function tagNikhelOnce(s) {
+  if (s.migNTag) return;
+  const isN = (t) => /^\s*N\b(?!\.\w)/.test(String(t || "").replace(/<[^>]+>/g, ""));
+  const visit = (node) => {
+    (node.goals || []).forEach((g) => { if (isN(g.text)) g.n = true; });
+    (node.tasks || []).forEach((t) => { if (isN(t.text)) t.n = true; });
+    if (node.tracker) (node.tracker.items || []).forEach(visit);
+  };
+  (s.projects || []).forEach(visit);
+  s.migNTag = true;
+}
+
 function ensureDefaults(s) {
   if (!s.projects) s.projects = [];
   s.projects.forEach((p, i) => {
@@ -316,6 +337,7 @@ function ensureDefaults(s) {
   }
   applyImports(s);
   moveFolderNotes(s);
+  tagNikhelOnce(s);
   return s;
 }
 
@@ -958,7 +980,7 @@ const CHECK_SVG =
   '<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6.5L4.5 9L10 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 const ICONS = {
-  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="M7.5 14h4v3.5h-4z"/></svg>',
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11V6.5A2.5 2.5 0 0017.5 4h-11A2.5 2.5 0 004 6.5v11A2.5 2.5 0 006.5 20H11"/><path d="M8 2v4M16 2v4M4 10h16"/><circle cx="17.5" cy="17.5" r="4.5"/><path d="M17.5 15.5v2l1.4 1.1"/></svg>',
   today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 007.07 0l2.83-2.83a5 5 0 00-7.07-7.07L11 5.93"/><path d="M14 10a5 5 0 00-7.07 0l-2.83 2.83a5 5 0 007.07 7.07L13 18.07"/></svg>',
@@ -2384,6 +2406,7 @@ function colGoalHeader(g, subs) {
       <div class="col-acts">
         <button class="col-act" data-ov-goal-toggle>${ACT_CHECK}${g.done ? "Reopen" : "Mark done"}</button>
         <button class="col-act" data-ov-goal-edit>Edit</button>
+        <button class="col-act n-act ${g.n ? "on" : ""}" data-ov-goal-n><span class="n-tag ${g.n ? "on" : ""}">N</span>${g.n ? "Nikhel's" : "Not Nikhel's"}</button>
         <button class="col-act col-act-quiet" data-ov-goal-delete>Delete</button>
       </div>
     </div>`;
@@ -2474,6 +2497,18 @@ function colTaskSub(t, spaceName) {
   return parts.length ? `<span class="col-sub">${parts.join("")}</span>` : "";
 }
 
+function nTagHtml(key) {
+  const [kind, rest] = colSplit(key);
+  if (kind !== "t" && kind !== "g") return "";
+  const t = colTarget(key);
+  if (!t || !t.obj) return "";
+  const own = !!t.obj.n;
+  const via = !own && kind === "t" && isForNikhel(t.obj, containerByRef(rest.split(":")[0]));
+  return `<button class="n-tag ${own ? "on" : ""} ${via ? "via" : ""}" data-n-toggle="${escapeHtml(key)}"
+    title="${own ? "On Nikhel's plate. Click to remove" : via ? "On Nikhel's plate through its goal" : "Put on Nikhel's plate"}"
+    aria-pressed="${own}">N</button>`;
+}
+
 function colRowHtml(key, selected, depth, showSpace, dates, collId) {
   const n = colNode(key);
   if (!n) return "";
@@ -2488,6 +2523,7 @@ function colRowHtml(key, selected, depth, showSpace, dates, collId) {
       ${lead}
       ${sub ? `<span class="col-text"><span class="col-label">${escapeHtml(n.label)}</span>${sub}</span>`
             : `<span class="col-label">${escapeHtml(n.label)}</span>`}
+      ${nTagHtml(key)}
       ${trail ? `<span class="col-trail">${trail}</span>` : ""}
       ${dates && n.task ? `<span class="col-dates"><span>${escapeHtml(shortDay(n.task.createdAt)) || "–"}</span><span>${n.task.done && n.task.closedAt ? escapeHtml(shortDay(n.task.closedAt)) : "–"}</span></span>` : ""}
       ${collId ? `<button class="col-x" data-coll-remove="${escapeHtml(collId)}|${escapeHtml(key)}" aria-label="Remove from collection" title="Remove from collection">${X_SVG}</button>` : ""}
@@ -2651,6 +2687,13 @@ function wireColumns() {
     if (t) openItemSheet({ ref: t.ref, kind: "goal", item: t.obj });
   });
   root.querySelector("[data-ov-goal-delete]")?.addEventListener("click", () => colDelete(goalKey));
+  root.querySelector("[data-ov-goal-n]")?.addEventListener("click", () => {
+    const t = colTarget(goalKey);
+    if (!t) return;
+    t.obj.n = !t.obj.n;
+    persist();
+    redrawColumns(colPath[colPath.length - 1]);
+  });
   root.querySelector("[data-ov-goal-toggle]")?.addEventListener("click", () => {
     const t = colTarget(goalKey);
     if (!t) return;
@@ -2668,6 +2711,17 @@ function wireColumns() {
     if (colPath.length >= 2 && (scroller.scrollWidth > scroller.clientWidth + 4 || (right && right.clientWidth < 520))) root.classList.add("cols-rail");
   }
   root.querySelectorAll("[data-order]").forEach((row) => wireRowDrag(row));
+  root.querySelectorAll("[data-n-toggle]").forEach((b) => {
+    b.addEventListener("pointerdown", (e) => e.stopPropagation());
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const t = colTarget(b.dataset.nToggle);
+      if (!t || !t.obj) return;
+      t.obj.n = !t.obj.n;
+      persist();
+      redrawColumns(colPath[colPath.length - 1]);
+    });
+  });
   root.querySelectorAll("[data-coll-remove]").forEach((b) => b.addEventListener("click", (e) => {
     e.stopPropagation();
     const [cid, ...rest] = b.dataset.collRemove.split("|");

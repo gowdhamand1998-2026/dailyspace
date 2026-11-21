@@ -57,7 +57,7 @@ const calLabel = (min) => { const h = Math.floor(min / 60), m = min % 60; const 
 /* the pending tasks the planner can use: open, most urgent first */
 function calTasks() {
   return allTaskRefs()
-    .filter(({ task }) => !task.done)
+    .filter(({ task, space }) => !task.done && isForNikhel(task, space.node))
     .sort((a, b) => (a.task.due || "9999").localeCompare(b.task.due || "9999"))
     .slice(0, 40)
     .map(({ task, ref, space }) => ({
@@ -207,6 +207,23 @@ function calBlockHtml({ b, s, e, lane, lanes }, draft) {
     </div>`;
 }
 
+/* the plan as a list you can edit: times, name and kind of every slot */
+function calAgendaHtml(blocks) {
+  const rows = blocks.slice().sort((x, y) => calMin(x.start) - calMin(y.start)).map((b) => `
+    <div class="cal-row k-${b.kind} ${calSel === b.id ? "is-sel" : ""}" data-cal-row="${b.id}">
+      <span class="cal-row-dot"></span>
+      <input type="time" step="900" class="cal-row-time" data-cal-f="start" value="${b.start}" aria-label="Start" />
+      <span class="cal-row-dash">–</span>
+      <input type="time" step="900" class="cal-row-time" data-cal-f="end" value="${b.end}" aria-label="End" />
+      <input class="cal-row-title" data-cal-f="title" value="${escapeHtml(b.title)}" aria-label="Name" title="${escapeHtml(b.reason || "")}" />
+      <select class="cal-row-kind" data-cal-f="kind" aria-label="Kind">${Object.entries(CAL_KINDS).map(([k, l]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <button class="cal-row-x" data-cal-rm aria-label="Remove slot" title="Remove slot">${X_SVG}</button>
+    </div>`).join("");
+  return `<div class="cal-agenda">${rows || `<p class="cal-hint">No slots yet.</p>`}
+      <button class="cal-row-add" data-cal-add>${ICONS.plus}<span>Add a slot</span></button>
+    </div>`;
+}
+
 function calSideHtml(day) {
   const d = day.draft;
   const tasksN = calTasks().length;
@@ -217,41 +234,31 @@ function calSideHtml(day) {
       <textarea class="cal-rules" data-cal-rules-text spellcheck="true">${escapeHtml(calStore().rules)}</textarea>
       <div class="col-acts"><button class="col-act col-act-quiet" data-cal-rules-reset>Reset to the starting rules</button></div>`;
   }
-  const sel = calSel && [...(d ? d.blocks : []), ...day.blocks].find((b) => b.id === calSel);
-  const selHtml = sel ? `
-      <div class="cal-edit">
-        <div class="cal-side-head"><h3>Block</h3><button class="col-act col-act-quiet" data-cal-unsel>Close</button></div>
-        <input class="cal-edit-title" data-cal-edit="title" value="${escapeHtml(sel.title)}" />
-        <div class="cal-edit-row">
-          <input type="time" step="900" data-cal-edit="start" value="${sel.start}" />
-          <span>to</span>
-          <input type="time" step="900" data-cal-edit="end" value="${sel.end}" />
-          <select data-cal-edit="kind">${Object.entries(CAL_KINDS).map(([k, l]) => `<option value="${k}" ${sel.kind === k ? "selected" : ""}>${l}</option>`).join("")}</select>
-        </div>
-        ${sel.reason ? `<p class="cal-reason">${escapeHtml(sel.reason)}</p>` : ""}
-        <div class="col-acts"><button class="col-act col-act-quiet" data-cal-del>Remove block</button></div>
-      </div>` : "";
-
-  if (calBusy) return `${selHtml}<div class="cal-busy"><span class="cal-spin"></span>Drafting Nikhel's day…</div>`;
+  if (calBusy) return `<div class="cal-busy"><span class="cal-spin"></span>Drafting Nikhel's day…</div>`;
+  const taskHint = tasksN
+    ? `Uses ${tasksN} open task${tasksN === 1 ? "" : "s"} tagged <span class="n-tag on">N</span> and your planning rules.`
+    : `No open tasks are tagged <span class="n-tag on">N</span> yet. Tag them in the columns, or just describe the day above.`;
 
   if (!d) {
-    return `${selHtml}
+    return `
+      ${day.blocks.length ? `<div class="cal-side-head"><h3>Plan</h3><span class="cal-draft-tag">accepted</span></div>${calAgendaHtml(day.blocks)}<div class="cal-sep"></div>` : ""}
       <div class="cal-side-head"><h3>${day.blocks.length ? "Plan again" : "Plan Nikhel's day"}</h3></div>
-      <textarea class="cal-input" data-cal-input rows="5" placeholder="Optional. Anything about the day: meetings, when Nikhel is free, what has to happen.\n\nLeave it empty and the draft comes from pending tasks and the planning rules."></textarea>
+      <textarea class="cal-input" data-cal-input rows="5" placeholder="Optional. Anything about the day: meetings, when Nikhel is free, what has to happen.\n\nLeave it empty and the draft comes from Nikhel's tasks and the planning rules."></textarea>
       <button class="btn btn-primary cal-go" data-cal-generate>Generate draft</button>
-      <p class="cal-hint">Uses ${tasksN} pending task${tasksN === 1 ? "" : "s"} and your planning rules.</p>
+      <p class="cal-hint">${taskHint}</p>
       ${calError ? `<p class="cal-error">${escapeHtml(calError)}</p>` : ""}`;
   }
-  return `${selHtml}
-    <div class="cal-side-head"><h3>Draft</h3><span class="cal-draft-tag">${d.blocks.length} block${d.blocks.length === 1 ? "" : "s"}</span></div>
+  return `
+    <div class="cal-side-head"><h3>Draft</h3><span class="cal-draft-tag">${d.blocks.length} slot${d.blocks.length === 1 ? "" : "s"}</span></div>
     ${d.source === "sample" ? `<p class="cal-sample">Sample only. Add the AI key and "Generate draft" will read what you type and plan meetings with prep and follow-up.</p>` : ""}
     ${d.summary ? `<p class="cal-summary">${escapeHtml(d.summary)}</p>` : ""}
     ${d.questions.length ? `<div class="cal-list"><div class="cal-list-h">Questions</div>${d.questions.map((q) => `<p>${escapeHtml(q)}</p>`).join("")}</div>` : ""}
-    ${d.unscheduled.length ? `<div class="cal-list"><div class="cal-list-h">Didn't fit · ${d.unscheduled.length}</div>${d.unscheduled.slice(0, 5).map((u) => `<p><b>${escapeHtml(u.title)}</b>${u.why ? ` · ${escapeHtml(u.why)}` : ""}</p>`).join("")}${d.unscheduled.length > 5 ? `<p class="cal-more">and ${d.unscheduled.length - 5} more</p>` : ""}</div>` : ""}
+    ${calAgendaHtml(d.blocks)}
     <div class="cal-actions">
       <button class="btn btn-primary" data-cal-accept>Accept plan</button>
       <button class="col-act col-act-quiet" data-cal-discard>Discard</button>
     </div>
+    ${d.unscheduled.length ? `<div class="cal-list"><div class="cal-list-h">Didn't fit · ${d.unscheduled.length}</div>${d.unscheduled.slice(0, 5).map((u) => `<p><b>${escapeHtml(u.title)}</b>${u.why ? ` · ${escapeHtml(u.why)}` : ""}</p>`).join("")}${d.unscheduled.length > 5 ? `<p class="cal-more">and ${d.unscheduled.length - 5} more</p>` : ""}</div>` : ""}
     <div class="cal-change">
       <textarea class="cal-input" data-cal-change rows="2" placeholder="Ask for a change, e.g. move the focus block after lunch"></textarea>
       <button class="col-act" data-cal-update>Update draft</button>
@@ -334,25 +341,51 @@ function wireCalendar(day) {
   $("[data-cal-accept]")?.addEventListener("click", () => { day.blocks = day.draft.blocks; day.draft = null; calSel = null; persist(); renderCalendarPage(); });
   $("[data-cal-discard]")?.addEventListener("click", () => { day.draft = null; calSel = null; persist(); renderCalendarPage(); });
 
-  // editing the selected block
+  // the schedule list: edit a slot's times, name or kind; remove or add slots
   const list = () => (day.draft ? day.draft.blocks : day.blocks);
-  const selBlock = () => [...(day.draft ? day.draft.blocks : []), ...day.blocks].find((b) => b.id === calSel);
-  $("[data-cal-unsel]")?.addEventListener("click", () => { calSel = null; renderCalendarPage(); });
-  app.querySelectorAll("[data-cal-edit]").forEach((el) => el.addEventListener("change", () => {
-    const b = selBlock(); if (!b) return;
-    const f = el.dataset.calEdit;
-    if (f === "start" || f === "end") {
-      const v = calMin(el.value); if (!Number.isFinite(v)) return;
-      const s = f === "start" ? v : calMin(b.start), e = f === "end" ? v : calMin(b.end);
-      if (e <= s) return renderCalendarPage();
-      b.start = calHHMM(s); b.end = calHHMM(e);
-    } else b[f] = el.value.trim() || b[f];
+  app.querySelectorAll("[data-cal-row]").forEach((row) => {
+    const b = list().find((x) => x.id === row.dataset.calRow);
+    if (!b) return;
+    row.querySelectorAll("[data-cal-f]").forEach((el) => el.addEventListener("change", () => {
+      const f = el.dataset.calF;
+      if (f === "start" || f === "end") {
+        const v = calMin(el.value);
+        if (!Number.isFinite(v)) return renderCalendarPage();
+        let st = calMin(b.start), en = calMin(b.end);
+        if (f === "start") { const len = en - st; st = v; en = Math.min(CAL_END, v + len); } // moving the start keeps the length
+        else en = v;
+        if (en <= st) return renderCalendarPage();
+        b.start = calHHMM(st); b.end = calHHMM(en);
+      } else if (f === "title") b.title = el.value.trim() || b.title;
+      else b.kind = el.value;
+      calSel = b.id;
+      persist(); renderCalendarPage();
+    }));
+    row.querySelector(".cal-row-title").addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.blur(); });
+    row.querySelector("[data-cal-rm]").addEventListener("click", () => {
+      const arr = list(); const i = arr.indexOf(b);
+      if (i >= 0) arr.splice(i, 1);
+      if (calSel === b.id) calSel = null;
+      persist(); renderCalendarPage();
+    });
+    row.addEventListener("focusin", () => {
+      if (calSel === b.id) return;
+      calSel = b.id;
+      app.querySelectorAll(".cal-block.is-sel, .cal-row.is-sel").forEach((x) => x.classList.remove("is-sel"));
+      row.classList.add("is-sel");
+      app.querySelector(`[data-cal-block="${b.id}"]`)?.classList.add("is-sel");
+    });
+  });
+  $("[data-cal-add]")?.addEventListener("click", () => {
+    const arr = list();
+    const last = arr.reduce((m, x) => Math.max(m, calMin(x.end)), 0);
+    const st = Math.min(CAL_END - 30, last ? last + 10 - ((last + 10) % 15) : 10 * 60);
+    const nb = { id: uid(), start: calHHMM(st), end: calHHMM(st + 30), title: "New slot", kind: "task", group: null, task: null, reason: "" };
+    arr.push(nb);
+    calSel = nb.id;
     persist(); renderCalendarPage();
-  }));
-  $("[data-cal-del]")?.addEventListener("click", () => {
-    const arr = list(); const i = arr.findIndex((b) => b.id === calSel);
-    if (i >= 0) arr.splice(i, 1);
-    calSel = null; persist(); renderCalendarPage();
+    const t = app.querySelector(`[data-cal-row="${nb.id}"] .cal-row-title`);
+    if (t) { t.focus(); t.select(); }
   });
 
   // drag a block to move it, drag its bottom edge to resize; a click selects it
@@ -385,6 +418,10 @@ function wireCalendar(day) {
         if (moved) persist();
         else calSel = calSel === b.id ? null : b.id;
         renderCalendarPage();
+        if (!moved && calSel) {
+          const r = app.querySelector(`[data-cal-row="${calSel}"]`);
+          if (r) { r.scrollIntoView({ block: "nearest", behavior: "smooth" }); r.querySelector(".cal-row-title").focus(); }
+        }
       };
       el.addEventListener("pointermove", onMove);
       el.addEventListener("pointerup", onUp);

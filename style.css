@@ -4395,3 +4395,55 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   .cal-hint { font-size: 12.5px; }
   .cal-rules { min-height: 60vh; font-size: 14px; line-height: 1.6; }
 }
+
+/* N: on Nikhel's plate. Filled when tagged, faint on hover to add */
+.n-tag {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 18px; height: 18px; border-radius: 5px; margin-left: 2px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0; line-height: 1;
+  color: var(--text-3); border: 1px solid var(--line-strong); background: transparent;
+  visibility: hidden; transition: background .15s, color .15s, border-color .15s;
+}
+.n-tag.on { visibility: visible; color: #0d0e11; background: #e3d7bf; border-color: #e3d7bf; }
+.n-tag.via { visibility: visible; color: #e3d7bf; border-color: rgba(227,215,191,.5); }
+.col-row:hover .n-tag, .n-tag:focus-visible { visibility: visible; }
+.n-tag:not(.on):hover { color: var(--text); border-color: var(--text-2); }
+.col-active .col-row.selected .n-tag:not(.on) { color: rgba(255,255,255,.8); border-color: rgba(255,255,255,.5); }
+@media (hover: none) { .n-tag { visibility: visible; opacity: .55; } .n-tag.on, .n-tag.via { opacity: 1; } }
+.cal-hint .n-tag, .n-act .n-tag { visibility: visible; margin: 0 2px; vertical-align: -3px; }
+.n-act { gap: 6px; }
+.n-act .n-tag { margin: 0; }
+
+/* the draft's schedule list: every slot editable in place */
+.cal-agenda { display: flex; flex-direction: column; gap: 2px; }
+.cal-row {
+  display: grid; grid-template-columns: 8px 118px 10px 118px minmax(0, 1fr) 104px 26px; align-items: center; gap: 6px;
+  padding: 4px 6px; border-radius: 9px; transition: background .15s;
+}
+.cal-row:hover, .cal-row.is-sel { background: rgba(255,255,255,.05); }
+.cal-row.is-sel { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.cal-row-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--k); }
+.cal-row input, .cal-row select {
+  min-width: 0; height: 30px; padding: 0 8px; border-radius: 7px; border: 1px solid transparent;
+  background: transparent; color: var(--text); font: 13.5px var(--sans); color-scheme: dark;
+}
+.cal-row-time { font-variant-numeric: tabular-nums; color: var(--text-2) !important; padding: 0 4px !important; }
+.cal-row input:hover, .cal-row select:hover { border-color: var(--line); }
+.cal-row input:focus, .cal-row select:focus { outline: none; border-color: var(--line-strong); background: rgba(255,255,255,.06); }
+.cal-row-title { font-weight: 500 !important; }
+.cal-row-kind { color: var(--text-3) !important; font-size: 12.5px !important; }
+.cal-row-dash { color: var(--text-3); text-align: center; }
+.cal-row-x { width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); opacity: 0; }
+.cal-row:hover .cal-row-x, .cal-row.is-sel .cal-row-x { opacity: 1; }
+.cal-row-x:hover { color: #f87171; background: rgba(248,113,113,.1); }
+.cal-row-add { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; margin: 6px 0 0 4px; height: 28px; padding: 0 10px 0 8px; border-radius: 7px; font-size: 12.5px; color: var(--text-2); background: rgba(255,255,255,.05); }
+.cal-row-add:hover { color: var(--text); background: rgba(255,255,255,.1); }
+.cal-row-add svg { width: 13px; height: 13px; }
+.cal-sep { height: 1px; background: var(--line); margin: 6px 0; }
+@media (hover: none) { .cal-row-x { opacity: 1; } }
+@media (max-width: 700px) {
+  .cal-row { grid-template-columns: 8px 108px 8px 108px 1fr 26px; }
+  .cal-row-kind { display: none; }
+  .cal-row-title { grid-column: 2 / -2; grid-row: 2; }
+}
+.cal-row-dot { background: var(--k, #8d909a); }
