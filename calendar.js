@@ -216,6 +216,7 @@ function calBlockHtml({ b, s, e, lane, lanes }, draft) {
 }
 
 const CAL_SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+const CAL_SPARK_SVG = `<svg class="cal-spark" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z"/><path d="M19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z"/></svg>`;
 const CAL_MIC_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>`;
 let calRec = null; // { rec, box, button } while listening
 
@@ -287,7 +288,6 @@ function calAgendaHtml(blocks) {
 
 function calSideHtml(day) {
   const d = day.draft;
-  const tasksN = calTasks().length;
   if (calRulesOpen) {
     return `
       <div class="cal-side-head"><h3>Planning rules</h3><button class="col-act col-act-quiet" data-cal-rules-close>Done</button></div>
@@ -296,17 +296,13 @@ function calSideHtml(day) {
       <div class="col-acts"><button class="col-act col-act-quiet" data-cal-rules-reset>Reset to the starting rules</button></div>`;
   }
   if (calBusy) return `<div class="cal-busy"><span class="cal-spin"></span>Drafting Nikhel's day…</div>`;
-  const taskHint = tasksN
-    ? `Uses ${tasksN} open task${tasksN === 1 ? "" : "s"} tagged <span class="n-tag on">N</span> and your planning rules.`
-    : `No open tasks are tagged <span class="n-tag on">N</span> yet. Tag them in the columns, or just describe the day above.`;
 
   if (!d) {
     return `
       ${day.blocks.length ? `<div class="cal-side-head"><h3>Plan</h3><span class="cal-draft-tag">accepted</span></div>${calAgendaHtml(day.blocks)}<div class="cal-sep"></div>` : ""}
       <div class="cal-side-head"><h3>${day.blocks.length ? "Plan again" : "Plan Nikhel's day"}</h3></div>
       ${calBoxHtml("data-cal-input", 5, "Optional. Type or tap Speak: meetings, when Nikhel is free, what has to happen.\n\nLeave it empty and the draft comes from Nikhel's tasks and the planning rules.")}
-      <button class="btn btn-primary cal-go" data-cal-generate>Generate draft</button>
-      <p class="cal-hint">${taskHint}</p>
+      <button class="btn btn-primary cal-go" data-cal-generate>${CAL_SPARK_SVG}Generate draft</button>
       ${calError ? `<p class="cal-error">${escapeHtml(calError)}</p>` : ""}`;
   }
   return `
@@ -322,7 +318,7 @@ function calSideHtml(day) {
     ${d.unscheduled.length ? `<div class="cal-list"><div class="cal-list-h">Didn't fit · ${d.unscheduled.length}</div>${d.unscheduled.slice(0, 5).map((u) => `<p><b>${escapeHtml(u.title)}</b>${u.why ? ` · ${escapeHtml(u.why)}` : ""}</p>`).join("")}${d.unscheduled.length > 5 ? `<p class="cal-more">and ${d.unscheduled.length - 5} more</p>` : ""}</div>` : ""}
     <div class="cal-change">
       ${calBoxHtml("data-cal-change", 2, "Ask for a change, e.g. move the focus block after lunch")}
-      <button class="col-act" data-cal-update>Update draft</button>
+      <button class="col-act cal-ai-btn" data-cal-update>${CAL_SPARK_SVG}Update draft</button>
     </div>
     ${calError ? `<p class="cal-error">${escapeHtml(calError)}</p>` : ""}`;
 }

@@ -4499,3 +4499,6 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   .cal-bar-sep, .cal-sub { display: none; }
   .cal-title { order: 5; width: 100%; margin: 4px 0 0; font-size: 18px; }
 }
+.cal-go, .cal-ai-btn { display: inline-flex; align-items: center; gap: 7px; }
+.cal-ai-btn .cal-spark { width: 13px; height: 13px; }
+.cal-go .cal-spark { width: 16px !important; height: 16px !important; flex-shrink: 0; }
