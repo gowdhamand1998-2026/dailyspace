@@ -4447,3 +4447,18 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   .cal-row-title { grid-column: 2 / -2; grid-row: 2; }
 }
 .cal-row-dot { background: var(--k, #8d909a); }
+
+/* speak instead of typing: a mic in the corner of each calendar text box */
+.cal-input-wrap { position: relative; display: flex; flex-direction: column; }
+.cal-input-wrap .cal-input { padding-bottom: 46px; }
+.cal-mic {
+  position: absolute; right: 10px; bottom: 10px;
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 9px; border-radius: 15px;
+  font-size: 12.5px; font-weight: 500; color: var(--text-2); background: rgba(255,255,255,.08);
+  transition: background .15s, color .15s;
+}
+.cal-mic:hover { color: var(--text); background: rgba(255,255,255,.14); }
+.cal-mic.is-on { color: #fff; background: #dc2626; }
+.cal-mic.is-on svg { animation: cal-mic-pulse 1.2s ease-in-out infinite; }
+@keyframes cal-mic-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .cal-mic.is-on svg { animation: none; } }

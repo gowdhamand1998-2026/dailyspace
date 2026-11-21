@@ -207,6 +207,59 @@ function calBlockHtml({ b, s, e, lane, lanes }, draft) {
     </div>`;
 }
 
+const CAL_SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+const CAL_MIC_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>`;
+let calRec = null; // { rec, box, button } while listening
+
+/* a text box with a mic in its corner (no mic where the browser can't do speech-to-text) */
+function calBoxHtml(attr, rows, placeholder) {
+  return `<div class="cal-input-wrap">
+      <textarea class="cal-input" ${attr} rows="${rows}" placeholder="${placeholder}"></textarea>
+      ${CAL_SR ? `<button class="cal-mic" data-cal-mic aria-label="Speak instead of typing" title="Speak instead of typing">${CAL_MIC_SVG}<span>Speak</span></button>` : ""}
+    </div>`;
+}
+
+function calStopMic() {
+  if (!calRec) return;
+  const { rec, button } = calRec;
+  calRec = null;
+  try { rec.stop(); } catch {}
+  if (button) { button.classList.remove("is-on"); button.querySelector("span").textContent = "Speak"; }
+}
+
+function calStartMic(button) {
+  const box = button.parentElement.querySelector("textarea");
+  if (!CAL_SR || !box) return;
+  calStopMic();
+  const rec = new CAL_SR();
+  rec.lang = navigator.language || "en-GB";
+  rec.continuous = true;
+  rec.interimResults = true;
+  const base = box.value ? box.value.replace(/\s*$/, " ") : "";
+  let finalText = "";
+  rec.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) finalText += r[0].transcript.trim() + " ";
+      else interim += r[0].transcript;
+    }
+    box.value = (base + finalText + interim).replace(/\s+$/, interim ? "" : " ");
+    box.scrollTop = box.scrollHeight;
+  };
+  rec.onerror = (e) => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") calError = "The browser blocked the microphone. Allow it in the address bar, then try again.";
+    calStopMic();
+    if (calError) renderCalendarPage();
+  };
+  rec.onend = () => { if (calRec && calRec.rec === rec) calStopMic(); box.value = box.value.trim(); };
+  calRec = { rec, box, button };
+  button.classList.add("is-on");
+  button.querySelector("span").textContent = "Listening… tap to stop";
+  try { rec.start(); } catch { calStopMic(); }
+  box.focus();
+}
+
 /* the plan as a list you can edit: times, name and kind of every slot */
 function calAgendaHtml(blocks) {
   const rows = blocks.slice().sort((x, y) => calMin(x.start) - calMin(y.start)).map((b) => `
@@ -243,7 +296,7 @@ function calSideHtml(day) {
     return `
       ${day.blocks.length ? `<div class="cal-side-head"><h3>Plan</h3><span class="cal-draft-tag">accepted</span></div>${calAgendaHtml(day.blocks)}<div class="cal-sep"></div>` : ""}
       <div class="cal-side-head"><h3>${day.blocks.length ? "Plan again" : "Plan Nikhel's day"}</h3></div>
-      <textarea class="cal-input" data-cal-input rows="5" placeholder="Optional. Anything about the day: meetings, when Nikhel is free, what has to happen.\n\nLeave it empty and the draft comes from Nikhel's tasks and the planning rules."></textarea>
+      ${calBoxHtml("data-cal-input", 5, "Optional. Type or tap Speak: meetings, when Nikhel is free, what has to happen.\n\nLeave it empty and the draft comes from Nikhel's tasks and the planning rules.")}
       <button class="btn btn-primary cal-go" data-cal-generate>Generate draft</button>
       <p class="cal-hint">${taskHint}</p>
       ${calError ? `<p class="cal-error">${escapeHtml(calError)}</p>` : ""}`;
@@ -260,13 +313,14 @@ function calSideHtml(day) {
     </div>
     ${d.unscheduled.length ? `<div class="cal-list"><div class="cal-list-h">Didn't fit · ${d.unscheduled.length}</div>${d.unscheduled.slice(0, 5).map((u) => `<p><b>${escapeHtml(u.title)}</b>${u.why ? ` · ${escapeHtml(u.why)}` : ""}</p>`).join("")}${d.unscheduled.length > 5 ? `<p class="cal-more">and ${d.unscheduled.length - 5} more</p>` : ""}</div>` : ""}
     <div class="cal-change">
-      <textarea class="cal-input" data-cal-change rows="2" placeholder="Ask for a change, e.g. move the focus block after lunch"></textarea>
+      ${calBoxHtml("data-cal-change", 2, "Ask for a change, e.g. move the focus block after lunch")}
       <button class="col-act" data-cal-update>Update draft</button>
     </div>
     ${calError ? `<p class="cal-error">${escapeHtml(calError)}</p>` : ""}`;
 }
 
 function renderCalendarPage() {
+  calStopMic();
   calStore();
   if (!calDay) calDay = dateKey(new Date());
   const day = calDayData(calDay);
@@ -332,6 +386,9 @@ function wireCalendar(day) {
   rulesBox?.addEventListener("input", () => { calStore().rules = rulesBox.value; persist(); });
   $("[data-cal-rules-reset]")?.addEventListener("click", () => showConfirm({ title: "Reset planning rules?", message: "Your edits to the rules will be replaced by the starting rules.", confirmLabel: "Reset" }, () => { calStore().rules = CAL_DEFAULT_RULES; persist(); renderCalendarPage(); }));
 
+  app.querySelectorAll("[data-cal-mic]").forEach((b) => b.addEventListener("click", () => {
+    if (calRec && calRec.button === b) calStopMic(); else calStartMic(b);
+  }));
   $("[data-cal-generate]")?.addEventListener("click", () => calGenerate());
   $("[data-cal-input]")?.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) calGenerate(); });
   const change = $("[data-cal-change]");
