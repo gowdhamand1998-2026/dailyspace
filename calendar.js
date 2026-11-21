@@ -30,7 +30,7 @@ const CAL_KINDS = {
 };
 const CAL_START = 7 * 60;   // the grid runs 07:00 – 21:00
 const CAL_END = 21 * 60;
-const CAL_PX = 1.1;         // pixels per minute
+const CAL_PX = 1.6;         // pixels per minute (an hour is ~96px, so 10-minute slots stay readable)
 const CAL_SNAP = 15;
 
 let calDay = null;          // "YYYY-MM-DD" on screen
