@@ -980,7 +980,7 @@ const CHECK_SVG =
   '<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6.5L4.5 9L10 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 const ICONS = {
-  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11V6.5A2.5 2.5 0 0017.5 4h-11A2.5 2.5 0 004 6.5v11A2.5 2.5 0 006.5 20H11"/><path d="M8 2v4M16 2v4M4 10h16"/><circle cx="17.5" cy="17.5" r="4.5"/><path d="M17.5 15.5v2l1.4 1.1"/></svg>',
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>',
   today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 007.07 0l2.83-2.83a5 5 0 00-7.07-7.07L11 5.93"/><path d="M14 10a5 5 0 00-7.07 0l-2.83 2.83a5 5 0 007.07 7.07L13 18.07"/></svg>',
@@ -988,7 +988,7 @@ const ICONS = {
   shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>',
   archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>',
   users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
-  review: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M3 10h18"/><path d="M8 15h4M8 18h7"/></svg>',
+  review: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 20.5h17"/><rect x="5" y="11" width="3.6" height="6.5" rx="1"/><rect x="10.2" y="5" width="3.6" height="12.5" rx="1"/><rect x="15.4" y="8.5" width="3.6" height="9" rx="1"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
   broom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
@@ -1385,6 +1385,8 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
       <div class="menubar">
         <div class="menubar-left">
           <span class="wordmark">Daily<em>Space</em></span>
+          <span class="menu-sep"></span>
+          <button class="menu-cal" data-menu-cal title="Plan Nikhel's day">${ICONS.cal}<span>Calendar</span></button>
         </div>
         <div class="menubar-right">
           <button class="sync-chip" id="sync-chip" data-sync data-state="${cloud.status}">${syncChipHtml()}</button>
@@ -1454,8 +1456,6 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
 
       <div class="dock">
         <button class="dock-btn" data-tip="Add" data-dock-add>${ICONS.plus}</button>
-        <div class="dock-sep"></div>
-        <button class="dock-btn" data-tip="Calendar" data-dock-cal>${ICONS.cal}</button>
         <div class="dock-sep"></div>
         ${TODAY_ENABLED ? `<button class="dock-btn" data-tip="Today" data-dock-today>${ICONS.today}
           ${(() => { const n = todayUrgentCount(); return `<span class="archive-count" data-today-badge ${n ? "" : "hidden"}>${n}</span>`; })()}
@@ -1569,7 +1569,7 @@ function wireDesktop() {
   // dock
   app.querySelector("[data-dock-add]").addEventListener("click", showAddChooser);
   app.querySelector("[data-dock-review]").addEventListener("click", () => (window.location.hash = "#/review"));
-  app.querySelector("[data-dock-cal]").addEventListener("click", () => (window.location.hash = "#/calendar"));
+  app.querySelector("[data-menu-cal]").addEventListener("click", () => (window.location.hash = "#/calendar"));
   app.querySelector("[data-dock-today]")?.addEventListener("click", () => (window.location.hash = "#/today"));
   wireTodayPanel();
   app.querySelector("[data-dock-tidy]").addEventListener("click", () => {
@@ -2499,6 +2499,7 @@ function colTaskSub(t, spaceName) {
 
 function nTagHtml(key) {
   const [kind, rest] = colSplit(key);
+  if (kind === "o") return `<span class="n-tag-space" aria-hidden="true"></span>`;
   if (kind !== "t" && kind !== "g") return "";
   const t = colTarget(key);
   if (!t || !t.obj) return "";
@@ -2523,9 +2524,9 @@ function colRowHtml(key, selected, depth, showSpace, dates, collId) {
       ${lead}
       ${sub ? `<span class="col-text"><span class="col-label">${escapeHtml(n.label)}</span>${sub}</span>`
             : `<span class="col-label">${escapeHtml(n.label)}</span>`}
-      ${nTagHtml(key)}
       ${trail ? `<span class="col-trail">${trail}</span>` : ""}
       ${dates && n.task ? `<span class="col-dates"><span>${escapeHtml(shortDay(n.task.createdAt)) || "–"}</span><span>${n.task.done && n.task.closedAt ? escapeHtml(shortDay(n.task.closedAt)) : "–"}</span></span>` : ""}
+      ${nTagHtml(key)}
       ${collId ? `<button class="col-x" data-coll-remove="${escapeHtml(collId)}|${escapeHtml(key)}" aria-label="Remove from collection" title="Remove from collection">${X_SVG}</button>` : ""}
       ${colTarget(key) ? `<button class="col-more" data-col-more="${escapeHtml(key)}" aria-label="More actions" title="More">${MORE_SVG}</button>` : `<span class="col-more col-more-blank" aria-hidden="true"></span>`}
       ${n.folder ? `<span class="col-chev">${CHEVRON_R}</span>` : ""}
@@ -2554,7 +2555,7 @@ function columnsHtml() {
         <span>${escapeHtml(s.title || "")}</span>
         ${s.action ? `<button class="col-add ${s.action.toggle ? "col-toggle" : ""}" data-col-action="${escapeHtml(keys[depth])}|${si}" title="${escapeHtml(s.action.label)}" aria-label="${escapeHtml(s.action.label)}">${s.action.toggle ? "" : ICONS.plus}<span>${escapeHtml(s.action.label)}</span></button>` : ""}
       </div>` : ""}
-      ${table && s.keys.length ? `<div class="col-thead"><span>Task</span><span class="col-dates"><span>Added</span><span>Done</span></span><span class="col-more col-more-blank"></span></div>` : ""}
+      ${table && s.keys.length ? `<div class="col-thead"><span>Task</span><span class="col-dates"><span>Added</span><span>Done</span></span><span class="n-tag-space"></span><span class="col-more col-more-blank"></span></div>` : ""}
       ${s.keys.map((k) => (s.order ? colRowHtml(k, k === sel, depth, false, table, node.collection).replace('<div class="col-row ', `<div data-order="${escapeHtml(s.order)}" class="col-row `) : colRowHtml(k, k === sel, depth, /^(w|per|people)$/.test(colSplit(keys[depth])[0]), table, node.collection))
         + (inlineAt === depth && k === sel ? (k.startsWith("pl:") ? colLinkInline(k) : colTaskInline(k)) : "")).join("")}
       ${!s.keys.length && s.empty ? `<div class="col-hint">${escapeHtml(s.empty)}</div>` : ""}

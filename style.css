@@ -4525,3 +4525,21 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 /* once details are typed, that button leads and the quick draft steps back */
 .cal-side:has(.cal-go-details.is-ready) [data-cal-quick] { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
 .cal-side:has(.cal-go-details.is-ready) [data-cal-quick]:hover { background: rgba(255,255,255,.08); }
+
+/* the N always sits in the same slot, just left of ··· */
+.n-tag, .n-tag-space { margin: 0 2px 0 6px; align-self: center; }
+.n-tag-space { width: 18px; height: 18px; flex-shrink: 0; }
+.col-thead .n-tag-space { margin: 0 2px 0 6px; }
+
+/* Calendar lives in the top bar, beside the wordmark */
+.menu-cal {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 8px; border-radius: 7px;
+  font: 500 12.5px/1 var(--sans); color: var(--text-2); background: rgba(255,255,255,.06);
+  transition: background .15s, color .15s;
+}
+.menu-cal:hover { color: var(--text); background: rgba(255,255,255,.12); }
+.menu-cal svg { width: 15px; height: 15px; }
+.menubar-left .menu-sep { height: 14px; }
+@media (max-width: 700px) {
+  .menu-cal { padding: 0 9px 0 7px; }
+}
