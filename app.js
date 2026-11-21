@@ -958,6 +958,7 @@ const CHECK_SVG =
   '<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6.5L4.5 9L10 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 const ICONS = {
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="M7.5 14h4v3.5h-4z"/></svg>',
   today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 007.07 0l2.83-2.83a5 5 0 00-7.07-7.07L11 5.93"/><path d="M14 10a5 5 0 00-7.07 0l-2.83 2.83a5 5 0 007.07 7.07L13 18.07"/></svg>',
@@ -1112,6 +1113,7 @@ function route() {
   if (window.location.hash === "#/a") { renderDesktop(null, null, null, true); return; }
   if (window.location.hash === "#/people") { renderPeoplePage(); return; }
   if (window.location.hash === "#/review") { renderReviewPage(); return; }
+  if (window.location.hash === "#/calendar") { renderCalendarPage(); return; }
 
   const cMatch = window.location.hash.match(/^#\/c\/(.+)$/);
   if (cMatch && state.collections.find((c) => c.id === cMatch[1])) {
@@ -1431,6 +1433,8 @@ function renderDesktop(openId, widgetKind, collectionId, archiveOpen) {
       <div class="dock">
         <button class="dock-btn" data-tip="Add" data-dock-add>${ICONS.plus}</button>
         <div class="dock-sep"></div>
+        <button class="dock-btn" data-tip="Calendar" data-dock-cal>${ICONS.cal}</button>
+        <div class="dock-sep"></div>
         ${TODAY_ENABLED ? `<button class="dock-btn" data-tip="Today" data-dock-today>${ICONS.today}
           ${(() => { const n = todayUrgentCount(); return `<span class="archive-count" data-today-badge ${n ? "" : "hidden"}>${n}</span>`; })()}
         </button>
@@ -1543,6 +1547,7 @@ function wireDesktop() {
   // dock
   app.querySelector("[data-dock-add]").addEventListener("click", showAddChooser);
   app.querySelector("[data-dock-review]").addEventListener("click", () => (window.location.hash = "#/review"));
+  app.querySelector("[data-dock-cal]").addEventListener("click", () => (window.location.hash = "#/calendar"));
   app.querySelector("[data-dock-today]")?.addEventListener("click", () => (window.location.hash = "#/today"));
   wireTodayPanel();
   app.querySelector("[data-dock-tidy]").addEventListener("click", () => {
